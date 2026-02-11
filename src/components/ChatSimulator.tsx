@@ -57,7 +57,7 @@ const STAGE_META = [
 const TOTAL_STAGES = STAGE_META.length
 
 // ===== AI SYSTEM PROMPT =====
-const AI_SYSTEM_PROMPT = `คุณชื่อ "Rain" ที่ปรึกษาย้ายประเทศ คุยสนุกเหมือนเพื่อน สั้นกระชับ ใช้ emoji บ้าง
+const AI_SYSTEM_PROMPT = `คุณชื่อ "Rain" ที่ปรึกษาย้ายประเทศ คุยสนุกเป็นกันเอง สั้นกระชับ ใช้ emoji บ้าง
 
 เก็บข้อมูล 5 อย่าง ถามทีละเรื่อง:
 1. ทำไมอยากย้าย → goals (1-3): money-job | balance | family | stable | lifestyle
@@ -66,16 +66,17 @@ const AI_SYSTEM_PROMPT = `คุณชื่อ "Rain" ที่ปรึกษ�
 4. ไปกับใคร → family: "single" | "couple" | "family"
 5. เงินเดือน → monthlyIncome: number (บาท)
 
-กฎสำคัญ:
-- ตอบสั้นมาก 1-2 ประโยค ห้ามยาว
-- รับรู้ที่ user พูดก่อน เช่น "เข้าใจเลย! 💪" แล้วถามต่อทันที
-- จบทุกข้อความด้วยคำถามหรือ prompt ที่ชัดเจน
-- user อาจกดปุ่มส่งคำตอบสั้นๆ มา ให้ตอบรับแล้วถามเรื่องถัดไปเลย
-- ห้ามถามหลายเรื่องพร้อมกัน ถามทีละ 1 เรื่อง
-- ห้ามสรุปยาว ห้ามอธิบายเยอะ
-- พอครบ → สรุปสั้น 1 บรรทัด แล้ว set ready: true
+สำคัญมาก:
+- ตอบสั้น 1-2 ประโยค ห้ามยาว
+- รับรู้ก่อนเช่น "เข้าใจ! 💪" แล้วถามเรื่องถัดไปทันที
+- จบทุกข้อความด้วยคำถาม 1 ข้อ ชัดเจน
+- user อาจกดปุ่มส่งคำตอบสั้นมา ให้ตอบรับแล้วถามเรื่องถัดไปเลย
+- ห้ามถามหลายเรื่องพร้อมกัน ถามทีละ 1 เรื่องเท่านั้น
+- ห้ามสรุปยาว ห้ามอธิบาย
+- gathered ต้องอัพเดตตลอด เก็บสะสมข้อมูลที่ได้
+- พอครบ 5 อย่าง → สรุปสั้น 1 บรรทัด set ready: true
 
-ตอบ JSON เสมอ:
+ตอบ JSON format:
 {"message": "...", "gathered": {"goals": [], "occupation": "", "monthlyIncome": 0, "age": "", "family": "", "ready": false}}`
 
 // ===== MAIN COMPONENT =====
@@ -119,6 +120,8 @@ export function ChatSimulator() {
   const [aiAnalysis, setAiAnalysis] = useState('')
   const [aiError, setAiError] = useState('')
   const [chipSelected, setChipSelected] = useState<string[]>([])
+  const [occChatSearch, setOccChatSearch] = useState('')
+  const [showOccSearch, setShowOccSearch] = useState(false)
 
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -148,6 +151,8 @@ export function ChatSimulator() {
     if (!text.trim() || aiLoading) return
     setAiInput('')
     setChipSelected([])
+    setShowOccSearch(false)
+    setOccChatSearch('')
     setAiError('')
     setAiMessages(prev => [...prev, { role: 'user', text: text.trim() }])
     setAiLoading(true)
@@ -157,11 +162,20 @@ export function ChatSimulator() {
 
     try {
       const aiRes = await chatWithGroq(apiKey, newHistory)
+      // Merge gathered: keep previously confirmed data, add new data from AI
+      const merged: GatheredData = {
+        goals: aiRes.gathered.goals.length > 0 ? aiRes.gathered.goals : aiGathered.goals,
+        occupation: aiRes.gathered.occupation || aiGathered.occupation,
+        monthlyIncome: aiRes.gathered.monthlyIncome || aiGathered.monthlyIncome,
+        age: aiRes.gathered.age || aiGathered.age,
+        family: aiRes.gathered.family || aiGathered.family,
+        ready: aiRes.gathered.ready,
+      }
       setAiMessages(prev => [...prev, { role: 'bot', text: aiRes.message }])
-      setAiChatHistory(prev => [...prev, { role: 'assistant', content: JSON.stringify(aiRes) }])
-      setAiGathered(aiRes.gathered)
+      setAiChatHistory(prev => [...prev, { role: 'assistant', content: JSON.stringify({ message: aiRes.message, gathered: merged }) }])
+      setAiGathered(merged)
     } catch (err) {
-      setAiError(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด')
+      setAiError(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด ลองพิมพ์ใหม่นะ')
     }
     setAiLoading(false)
   }
@@ -212,7 +226,7 @@ export function ChatSimulator() {
     setChipSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : prev.length < 3 ? [...prev, id] : prev)
   }
 
-  const GOAL_CHIP_LABELS: Record<string, string> = {
+  const GOAL_LABELS: Record<string, string> = {
     'money-job': '💰 เงินดี หางานง่าย',
     'balance': '🏖️ Work-life balance',
     'family': '👨‍👩‍👧 ลูกเรียนดี สวัสดิการ',
@@ -222,59 +236,32 @@ export function ChatSimulator() {
 
   const sendGoalChips = () => {
     if (chipSelected.length === 0) return
-    const text = chipSelected.map(id => GOAL_CHIP_LABELS[id] || id).join(', ')
+    const text = chipSelected.map(id => GOAL_LABELS[id] || id).join(', ')
     sendMessage(text)
   }
 
-  // Quick reply chips based on gathered data
-  const getQuickReplies = (): { type: 'none' | 'multi' | 'single'; items: { id: string; label: string }[] } => {
-    if (aiLoading || aiGathered.ready || aiMessages.length < 1) return { type: 'none', items: [] }
-    if (aiGathered.goals.length === 0) {
-      return { type: 'multi', items: [
-        { id: 'money-job', label: '💰 เงินดี หางานง่าย' },
-        { id: 'balance', label: '🏖️ Work-life balance' },
-        { id: 'family', label: '👨‍👩‍👧 ลูกเรียนดี สวัสดิการ' },
-        { id: 'stable', label: '🏛️ การเมืองมั่นคง' },
-        { id: 'lifestyle', label: '🌴 ย้ายง่าย เกษียณสบาย' },
-      ]}
-    }
-    if (!aiGathered.occupation) {
-      return { type: 'single', items: [
-        { id: 'software', label: '💻 IT / โปรแกรมเมอร์' },
-        { id: 'engineering', label: '⚙️ วิศวกร / ช่าง' },
-        { id: 'accounting', label: '📊 บัญชี / การเงิน' },
-        { id: 'healthcare', label: '🏥 แพทย์ / พยาบาล' },
-        { id: 'chef', label: '👨‍🍳 เชฟ / โรงแรม' },
-        { id: 'other', label: '📝 อื่นๆ' },
-      ]}
-    }
-    if (!aiGathered.age) {
-      return { type: 'single', items: [
-        { id: '18-24', label: '18-24 ปี' },
-        { id: '25-32', label: '25-32 ปี' },
-        { id: '33-39', label: '33-39 ปี' },
-        { id: '40-44', label: '40-44 ปี' },
-        { id: '45+', label: '45+ ปี' },
-      ]}
-    }
-    if (!aiGathered.family) {
-      return { type: 'single', items: [
-        { id: 'single', label: '🧑 คนเดียว' },
-        { id: 'couple', label: '👫 กับคนรัก' },
-        { id: 'family', label: '👨‍👩‍👧 ครอบครัว' },
-      ]}
-    }
-    if (aiGathered.monthlyIncome === 0) {
-      return { type: 'single', items: [
-        { id: '15000', label: '~15,000 ฿' },
-        { id: '25000', label: '~25,000 ฿' },
-        { id: '35000', label: '~35,000 ฿' },
-        { id: '50000', label: '~50,000 ฿' },
-        { id: '80000', label: '~80,000 ฿' },
-        { id: '120000', label: '100,000+ ฿' },
-      ]}
-    }
-    return { type: 'none', items: [] }
+  // Pick occupation from search and send to AI
+  const pickOccFromSearch = (title: string, occId: string) => {
+    setShowOccSearch(false)
+    setOccChatSearch('')
+    sendMessage(title)
+  }
+
+  // Determine what chips to show based on current gathered state
+  type ChipMode = 'none' | 'goals' | 'goals-confirm' | 'occ-search' | 'age' | 'family' | 'income'
+  const getChipMode = (): ChipMode => {
+    if (aiLoading || aiGathered.ready || aiMessages.length < 1) return 'none'
+    // Goals phase
+    if (aiGathered.goals.length === 0) return 'goals'
+    // Occupation phase: show search
+    if (!aiGathered.occupation) return 'occ-search'
+    // Age
+    if (!aiGathered.age) return 'age'
+    // Family
+    if (!aiGathered.family) return 'family'
+    // Income
+    if (aiGathered.monthlyIncome === 0) return 'income'
+    return 'none'
   }
 
   // ===== DERIVED (AU SIMULATION) =====
@@ -406,7 +393,7 @@ export function ChatSimulator() {
     setAuProfile({ english: '', experience: '', education: '', thaiSalary: '', city: 'melbourne' })
     setSimStage(0); setSavingsInput(''); setIsMotherLord(false); setInitialAUD(0); setChoices({})
     setAiMessages([]); setAiChatHistory([]); setAiInput(''); setAiGathered({ goals: [], occupation: '', monthlyIncome: 0, age: '', family: '', ready: false })
-    setAiAnalysis(''); setAiError(''); setOccDisplayLabel(''); setChipSelected([]); setAiMode(false)
+    setAiAnalysis(''); setAiError(''); setOccDisplayLabel(''); setChipSelected([]); setShowOccSearch(false); setOccChatSearch(''); setAiMode(false)
     // Re-start AI chat after reset
     setTimeout(() => {
       setAiMode(true)
@@ -446,7 +433,8 @@ export function ChatSimulator() {
   // ===== RENDER: AI CHAT =====
   // ================================================================
   if (phase === 'aiChat') {
-    const chips = getQuickReplies()
+    const chipMode = getChipMode()
+    const occResults = occChatSearch.length >= 1 ? searchOccupations(occChatSearch) : []
     return (
       <div className="sim-container">
         <div className="sim-scroll">
@@ -467,24 +455,22 @@ export function ChatSimulator() {
             </div>
           )}
 
-          {/* Quick reply chips */}
-          {!aiLoading && !aiGathered.ready && chips.type !== 'none' && (
+          {/* ===== GOALS: multi-select chips ===== */}
+          {chipMode === 'goals' && (
             <div className="quick-replies animate-fade-in">
-              <div className="chip-hint">
-                {chips.type === 'multi' ? 'กดเลือก 1-3 ข้อ แล้วกดส่ง ✨' : 'กดเลือกเลย หรือพิมพ์เอง ✍️'}
-              </div>
+              <div className="chip-hint">กดเลือก 1-3 ข้อ แล้วกดส่ง ✨ หรือพิมพ์เอง</div>
               <div className="chip-grid">
-                {chips.items.map(c => (
+                {Object.entries(GOAL_LABELS).map(([id, label]) => (
                   <button
-                    key={c.id}
-                    onClick={() => chips.type === 'multi' ? toggleChip(c.id) : sendMessage(c.label)}
-                    className={`quick-chip ${chipSelected.includes(c.id) ? 'selected' : ''}`}
+                    key={id}
+                    onClick={() => toggleChip(id)}
+                    className={`quick-chip ${chipSelected.includes(id) ? 'selected' : ''}`}
                   >
-                    {c.label}
+                    {label}
                   </button>
                 ))}
               </div>
-              {chips.type === 'multi' && chipSelected.length > 0 && (
+              {chipSelected.length > 0 && (
                 <button onClick={sendGoalChips} className="chip-confirm animate-fade-in">
                   ✅ ส่ง {chipSelected.length} ข้อ
                 </button>
@@ -492,10 +478,100 @@ export function ChatSimulator() {
             </div>
           )}
 
+          {/* ===== OCCUPATION: searchable dropdown ===== */}
+          {chipMode === 'occ-search' && (
+            <div className="quick-replies animate-fade-in">
+              <div className="chip-hint">🔍 พิมพ์อาชีพ หรือเลือกจากรายการ</div>
+              <div className="occ-chat-search">
+                <input
+                  type="text"
+                  value={occChatSearch}
+                  onChange={e => { setOccChatSearch(e.target.value); setShowOccSearch(true) }}
+                  onFocus={() => setShowOccSearch(true)}
+                  placeholder="เช่น nurse, developer, ครู, เชฟ..."
+                  className="occ-chat-input"
+                />
+                {showOccSearch && occChatSearch.length >= 1 && (
+                  <div className="occ-chat-results">
+                    {occResults.map(r => (
+                      <button
+                        key={r.key}
+                        onClick={() => pickOccFromSearch(r.title, r.occId)}
+                        className="occ-chat-item"
+                      >
+                        <span className="occ-chat-title">{r.title}</span>
+                        <span className="occ-chat-cat">{r.category}</span>
+                      </button>
+                    ))}
+                    {occResults.length === 0 && (
+                      <div className="occ-chat-empty">
+                        ไม่เจอ — <button onClick={() => sendMessage(occChatSearch)} className="occ-chat-fallback">ใช้ &ldquo;{occChatSearch}&rdquo; เลย</button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              {/* Quick picks below search */}
+              <div className="chip-grid" style={{ marginTop: '8px' }}>
+                {[
+                  { id: 'IT / โปรแกรมเมอร์', label: '💻 IT' },
+                  { id: 'วิศวกร', label: '⚙️ วิศวกร' },
+                  { id: 'บัญชี / การเงิน', label: '📊 บัญชี' },
+                  { id: 'แพทย์ / พยาบาล', label: '🏥 สาธารณสุข' },
+                  { id: 'เชฟ / ครัว', label: '👨‍🍳 เชฟ' },
+                ].map(c => (
+                  <button key={c.id} onClick={() => sendMessage(c.id)} className="quick-chip small">
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ===== AGE: single-tap chips ===== */}
+          {chipMode === 'age' && (
+            <div className="quick-replies animate-fade-in">
+              <div className="chip-hint">กดเลือกเลย ✍️</div>
+              <div className="chip-grid">
+                {['18-24 ปี', '25-32 ปี', '33-39 ปี', '40-44 ปี', '45+ ปี'].map(label => (
+                  <button key={label} onClick={() => sendMessage(label)} className="quick-chip">{label}</button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ===== FAMILY: single-tap chips ===== */}
+          {chipMode === 'family' && (
+            <div className="quick-replies animate-fade-in">
+              <div className="chip-hint">กดเลือกเลย ✍️</div>
+              <div className="chip-grid">
+                {[
+                  { label: '🧑 คนเดียว' },
+                  { label: '👫 กับคนรัก' },
+                  { label: '👨‍👩‍👧 ครอบครัว' },
+                ].map(c => (
+                  <button key={c.label} onClick={() => sendMessage(c.label)} className="quick-chip">{c.label}</button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ===== INCOME: single-tap chips ===== */}
+          {chipMode === 'income' && (
+            <div className="quick-replies animate-fade-in">
+              <div className="chip-hint">เลือกช่วงเงินเดือน หรือพิมพ์ตัวเลข ✍️</div>
+              <div className="chip-grid">
+                {['15,000 บาท', '25,000 บาท', '35,000 บาท', '50,000 บาท', '80,000 บาท', '100,000+ บาท'].map(label => (
+                  <button key={label} onClick={() => sendMessage(label)} className="quick-chip">{label}</button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Gathered info badges */}
           {(aiGathered.goals.length > 0 || aiGathered.occupation) && !aiGathered.ready && (
             <div className="ai-gathered animate-fade-in">
-              {aiGathered.goals.length > 0 && <span className="ai-badge">🎯 {aiGathered.goals.length} goals</span>}
+              {aiGathered.goals.length > 0 && <span className="ai-badge">🎯 {aiGathered.goals.map(g => GOAL_LABELS[g] || g).join(', ')}</span>}
               {aiGathered.occupation && <span className="ai-badge">💼 {aiGathered.occupation}</span>}
               {aiGathered.monthlyIncome > 0 && <span className="ai-badge">💰 {aiGathered.monthlyIncome.toLocaleString()}฿</span>}
               {aiGathered.age && <span className="ai-badge">📅 {aiGathered.age}</span>}
@@ -507,6 +583,7 @@ export function ChatSimulator() {
           {aiError && (
             <div className="ai-error animate-fade-in">
               ⚠️ {aiError}
+              <button onClick={() => setAiError('')} className="text-xs text-blue-600 underline ml-2">ลองใหม่</button>
             </div>
           )}
 

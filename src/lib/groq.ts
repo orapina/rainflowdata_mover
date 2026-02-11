@@ -31,6 +31,7 @@ export interface AIResponse {
 export async function chatWithGroq(
   apiKey: string,
   messages: ChatMessage[],
+  _retry = 0,
 ): Promise<AIResponse> {
   const res = await fetch(GROQ_API_URL, {
     method: 'POST',
@@ -43,7 +44,6 @@ export async function chatWithGroq(
       messages,
       temperature: 0.7,
       max_tokens: 1024,
-      response_format: { type: 'json_object' },
     }),
   })
 
@@ -51,32 +51,56 @@ export async function chatWithGroq(
     const errBody = await res.text().catch(() => '')
     if (res.status === 401) throw new Error('API key ไม่ถูกต้อง — ตรวจสอบ Groq API key อีกครั้ง')
     if (res.status === 429) throw new Error('เรียก API ถี่เกินไป — รอสักครู่แล้วลองใหม่')
+    // Retry once on 400/500
+    if (_retry < 1 && (res.status === 400 || res.status >= 500)) {
+      await new Promise(r => setTimeout(r, 1000))
+      return chatWithGroq(apiKey, messages, _retry + 1)
+    }
     throw new Error(`Groq API error ${res.status}: ${errBody.slice(0, 200)}`)
   }
 
   const data = await res.json()
-  const content = data.choices?.[0]?.message?.content || '{}'
+  const content = data.choices?.[0]?.message?.content || ''
 
-  try {
-    const parsed = JSON.parse(content)
+  // Try to find JSON in response (may be embedded in text)
+  const parsed = extractJSON(content)
+  if (parsed) {
     return {
       message: parsed.message || 'ขอข้อมูลเพิ่มหน่อยนะ',
       gathered: {
-        goals: parsed.gathered?.goals || [],
+        goals: Array.isArray(parsed.gathered?.goals) ? parsed.gathered.goals : [],
         occupation: parsed.gathered?.occupation || '',
-        monthlyIncome: parsed.gathered?.monthlyIncome || 0,
+        monthlyIncome: Number(parsed.gathered?.monthlyIncome) || 0,
         age: parsed.gathered?.age || '',
         family: parsed.gathered?.family || '',
-        ready: parsed.gathered?.ready || false,
+        ready: !!parsed.gathered?.ready,
       },
     }
-  } catch {
-    // ถ้า parse ไม่ได้ ใช้ raw text เป็น message
-    return {
-      message: content,
-      gathered: { goals: [], occupation: '', monthlyIncome: 0, age: '', family: '', ready: false },
-    }
   }
+
+  // Fallback: plain text, no gathered data
+  return {
+    message: content || 'ขอข้อมูลเพิ่มหน่อยนะ 😊',
+    gathered: { goals: [], occupation: '', monthlyIncome: 0, age: '', family: '', ready: false },
+  }
+}
+
+/** Extract JSON object from text that may contain markdown/extra text */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractJSON(text: string): any | null {
+  // Try direct parse first
+  try {
+    const obj = JSON.parse(text)
+    if (obj && typeof obj === 'object') return obj
+  } catch { /* not pure JSON */ }
+  // Find JSON block in text
+  const match = text.match(/\{[\s\S]*"message"[\s\S]*"gathered"[\s\S]*\}/)
+  if (match) {
+    try {
+      return JSON.parse(match[0])
+    } catch { /* malformed */ }
+  }
+  return null
 }
 
 /** AI วิเคราะห์ผลลัพธ์ (เรียกหลัง matching เสร็จ) */

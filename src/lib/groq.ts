@@ -1,12 +1,36 @@
 // ===== Groq API Client (Llama 3.3 70B — free tier) =====
-// เรียกตรงจาก browser ผ่าน Groq REST API
+// ถ้ามี PROXY_URL → เรียกผ่าน Cloudflare Worker (key ซ่อนใน server)
+// ถ้าไม่มี → ใช้ GROQ_KEY จาก env var (build-time inject)
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
 const MODEL = 'llama-3.3-70b-versatile'
 
-// Embedded key (Groq free tier)
-const _C = [100,119,110,89,118,93,64,102,64,113,114,81,64,83,82,77,64,83,55,99,77,103,106,67,81,64,108,112,97,55,67,95,119,97,67,74,94,105,68,52,110,98,85,51,78,99,70,121,64,84,70,66,97,102,89,59]
-const DEFAULT_KEY = _C.map((v, i) => String.fromCharCode(v ^ (i % 7 + 3))).join('')
+// Config จาก env var (inject ตอน build ผ่าน NEXT_PUBLIC_*)
+const PROXY_URL = process.env.NEXT_PUBLIC_PROXY_URL || '' // Cloudflare Worker URL
+const ENV_KEY = process.env.NEXT_PUBLIC_GROQ_KEY || ''    // Fallback: direct key
+
+/** เรียก Groq API — ผ่าน proxy ถ้ามี, ไม่งั้นใช้ key ตรง */
+async function callGroq(body: Record<string, unknown>): Promise<Response> {
+  if (PROXY_URL) {
+    // Proxy mode: key อยู่ฝั่ง server ไม่ส่ง Authorization header
+    return fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  }
+  // Direct mode: ใช้ key จาก env var
+  const key = getStoredApiKey()
+  if (!key) throw new Error('ไม่มี API key — กรุณาตั้งค่า NEXT_PUBLIC_GROQ_KEY หรือ NEXT_PUBLIC_PROXY_URL')
+  return fetch(GROQ_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${key}`,
+    },
+    body: JSON.stringify(body),
+  })
+}
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
@@ -29,22 +53,15 @@ export interface AIResponse {
 
 /** ส่งข้อความไป Groq แล้วได้ AIResponse กลับมา */
 export async function chatWithGroq(
-  apiKey: string,
+  _apiKey: string,
   messages: ChatMessage[],
   _retry = 0,
 ): Promise<AIResponse> {
-  const res = await fetch(GROQ_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      messages,
-      temperature: 0.7,
-      max_tokens: 1024,
-    }),
+  const res = await callGroq({
+    model: MODEL,
+    messages,
+    temperature: 0.7,
+    max_tokens: 1024,
   })
 
   if (!res.ok) {
@@ -54,7 +71,7 @@ export async function chatWithGroq(
     // Retry once on 400/500
     if (_retry < 1 && (res.status === 400 || res.status >= 500)) {
       await new Promise(r => setTimeout(r, 1000))
-      return chatWithGroq(apiKey, messages, _retry + 1)
+      return chatWithGroq('', messages, _retry + 1)
     }
     throw new Error(`Groq API error ${res.status}: ${errBody.slice(0, 200)}`)
   }
@@ -105,7 +122,7 @@ function extractJSON(text: string): any | null {
 
 /** AI วิเคราะห์ผลลัพธ์ (เรียกหลัง matching เสร็จ) */
 export async function analyzeResults(
-  apiKey: string,
+  _apiKey: string,
   userContext: string,    // สรุปสิ่งที่ user บอก
   resultsContext: string, // ผลลัพธ์ top 5 countries
 ): Promise<string> {
@@ -128,18 +145,11 @@ export async function analyzeResults(
     },
   ]
 
-  const res = await fetch(GROQ_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      messages,
-      temperature: 0.6,
-      max_tokens: 512,
-    }),
+  const res = await callGroq({
+    model: MODEL,
+    messages,
+    temperature: 0.6,
+    max_tokens: 512,
   })
 
   if (!res.ok) throw new Error('AI analysis failed')
@@ -149,7 +159,7 @@ export async function analyzeResults(
 
 /** AI-powered country ranking (replaces hardcoded matchCountries) */
 export async function rankCountriesWithAI(
-  apiKey: string,
+  _apiKey: string,
   userProfile: {
     goals: string[]
     occupation: string
@@ -224,18 +234,11 @@ ${countrySummaries}
     },
   ]
 
-  const res = await fetch(GROQ_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      messages,
-      temperature: 0.4,
-      max_tokens: 1500,
-    }),
+  const res = await callGroq({
+    model: MODEL,
+    messages,
+    temperature: 0.4,
+    max_tokens: 1500,
   })
 
   if (!res.ok) throw new Error(`AI ranking failed: ${res.status}`)
@@ -266,13 +269,34 @@ ${countrySummaries}
   }))
 }
 
-/** ดึง API key */
+/** ดึง API key (จาก env var ถ้ามี, หรือ localStorage ถ้า user ใส่เอง) */
 export function getStoredApiKey(): string {
-  return DEFAULT_KEY
+  // 1. Proxy mode → ไม่ต้องใช้ key client-side
+  if (PROXY_URL) return 'proxy'
+  // 2. Build-time env var
+  if (ENV_KEY) return ENV_KEY
+  // 3. User ใส่เอง (localStorage)
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('groq_key') || ''
+  }
+  return ''
 }
 
-/** เก็บ API key (no-op) */
-export function storeApiKey(_key: string) {}
+/** เก็บ API key ใน localStorage */
+export function storeApiKey(key: string) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('groq_key', key)
+  }
+}
 
-/** ลบ API key (no-op) */
-export function clearApiKey() {}
+/** ลบ API key จาก localStorage */
+export function clearApiKey() {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('groq_key')
+  }
+}
+
+/** ตรวจว่าใช้ proxy mode หรือไม่ */
+export function isProxyMode(): boolean {
+  return !!PROXY_URL
+}

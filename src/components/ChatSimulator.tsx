@@ -2,8 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react'
 import {
-  COUNTRIES, MOTIVATIONS, PRIORITIES, OCCUPATIONS,
-  MOTIVATION_QUICK_RESPONSES,
+  COUNTRIES, GOALS, OCCUPATIONS,
   matchCountries,
   type MatchResult, type MatchParams,
 } from '@/data/country-data'
@@ -57,10 +56,9 @@ export function ChatSimulator() {
 
   // Quiz state
   const [quizStep, setQuizStep] = useState(0)
-  const [motivations, setMotivations] = useState<string[]>([])
+  const [goals, setGoals] = useState<string[]>([])
   const [occupation, setOccupation] = useState('')
   const [quickProfile, setQuickProfile] = useState<QuickProfile>({ age: '', monthlyIncome: '', savings: '', family: 'single' })
-  const [priorities, setPriorities] = useState<string[]>([])
 
   // Country results
   const [matchResults, setMatchResults] = useState<MatchResult[]>([])
@@ -140,12 +138,12 @@ export function ChatSimulator() {
   const finalOneTime = preDepartureTotal + flightCost + tempCost + bond + furnishCost
 
   // ===== HANDLERS =====
-  const toggleMotivation = (id: string) => {
-    setMotivations(prev => prev.includes(id) ? prev.filter(x => x !== id) : prev.length < 3 ? [...prev, id] : prev)
+  const toggleGoal = (id: string) => {
+    setGoals(prev => prev.includes(id) ? prev.filter(x => x !== id) : prev.length < 3 ? [...prev, id] : prev)
   }
 
-  const confirmMotivations = () => {
-    if (motivations.length >= 1) setQuizStep(1)
+  const confirmGoals = () => {
+    if (goals.length >= 1) setQuizStep(1)
   }
 
   const pickOccupation = (id: string) => {
@@ -156,21 +154,15 @@ export function ChatSimulator() {
   const upQ = (field: keyof QuickProfile, val: string) => setQuickProfile(p => ({ ...p, [field]: val }))
 
   const confirmProfile = () => {
-    if (quickProfile.age && quickProfile.monthlyIncome) setQuizStep(3)
-  }
-
-  const togglePriority = (id: string) => {
-    setPriorities(prev => prev.includes(id) ? prev.filter(x => x !== id) : prev.length < 3 ? [...prev, id] : prev)
+    if (quickProfile.age && quickProfile.monthlyIncome) startAnalyzing()
   }
 
   const startAnalyzing = () => {
-    if (priorities.length < 2) return
     setPhase('analyzing')
     setTimeout(() => {
       const params: MatchParams = {
-        motivations,
+        goals,
         occupation,
-        priorities,
         monthlyIncome: parseInt(quickProfile.monthlyIncome) || 30000,
         age: quickProfile.age,
         family: quickProfile.family,
@@ -209,9 +201,9 @@ export function ChatSimulator() {
   const pick = (stageId: string, optionId: string) => { setChoices(prev => ({ ...prev, [stageId]: optionId })); setSimStage(s => s + 1) }
 
   const restart = () => {
-    setPhase('quiz'); setQuizStep(0); setMotivations([]); setOccupation('')
+    setPhase('quiz'); setQuizStep(0); setGoals([]); setOccupation('')
     setQuickProfile({ age: '', monthlyIncome: '', savings: '', family: 'single' })
-    setPriorities([]); setMatchResults([]); setSelectedCountry(''); setExpandedCountry('')
+    setMatchResults([]); setSelectedCountry(''); setExpandedCountry('')
     setAuProfile({ english: '', experience: '', education: '', thaiSalary: '', city: 'melbourne' })
     setSimStage(0); setSavingsInput(''); setIsMotherLord(false); setInitialAUD(0); setChoices({})
   }
@@ -225,7 +217,7 @@ export function ChatSimulator() {
         <div className="sim-scroll">
           {/* Quiz Progress */}
           <div className="quiz-progress">
-            {['ทำไมย้าย', 'อาชีพ', 'ข้อมูล', 'สำคัญอะไร'].map((label, i) => (
+            {['สำคัญอะไร', 'อาชีพ', 'ข้อมูล'].map((label, i) => (
               <div key={i} className={`quiz-step-dot ${i < quizStep ? 'done' : i === quizStep ? 'current' : ''}`}>
                 <span className="quiz-step-num">{i + 1}</span>
                 <span className="quiz-step-label">{label}</span>
@@ -233,36 +225,36 @@ export function ChatSimulator() {
             ))}
           </div>
 
-          {/* ===== STEP 0: MOTIVATION ===== */}
+          {/* ===== STEP 0: GOALS ===== */}
           <BotMsg>
             ว่าไง! 👋 กำลังคิดจะย้ายประเทศเหรอ?<br />
-            เล่าให้ฟังหน่อย <strong>ทำไมอยากย้าย?</strong> เลือกได้ 1-3 ข้อ
+            <strong>อะไรสำคัญที่สุด?</strong> เลือก 1-3 ข้อ
           </BotMsg>
 
           {quizStep === 0 && (
             <div className="animate-fade-in">
               <div className="options-grid">
-                {MOTIVATIONS.map(m => (
-                  <button key={m.id} onClick={() => toggleMotivation(m.id)}
-                    className={`chat-option-btn ${motivations.includes(m.id) ? 'selected' : ''}`}>
-                    {m.label}
+                {GOALS.map(g => (
+                  <button key={g.id} onClick={() => toggleGoal(g.id)}
+                    className={`chat-option-btn ${goals.includes(g.id) ? 'selected' : ''}`}>
+                    {g.label}
                   </button>
                 ))}
               </div>
-              {motivations.length >= 1 && (
-                <button onClick={confirmMotivations} className="btn-primary w-full mt-3 justify-center rounded-xl py-3 text-sm">
-                  ✅ เลือกแล้ว! ({motivations.length} ข้อ)
+              {goals.length >= 1 && (
+                <button onClick={confirmGoals} className="btn-primary w-full mt-3 justify-center rounded-xl py-3 text-sm">
+                  ✅ เลือกแล้ว! ({goals.length} ข้อ)
                 </button>
               )}
             </div>
           )}
 
-          {/* User chose motivations */}
+          {/* User chose goals */}
           {quizStep >= 1 && (
             <>
-              <UserMsg>{motivations.map(m => MOTIVATIONS.find(x => x.id === m)?.emoji).join(' ')}</UserMsg>
+              <UserMsg>{goals.map(g => GOALS.find(x => x.id === g)?.emoji).join(' ')}</UserMsg>
               <BotMsg>
-                {MOTIVATION_QUICK_RESPONSES[motivations[0]] || 'เข้าใจเลย!'}<br /><br />
+                {GOALS.find(x => x.id === goals[0])?.response || 'เข้าใจเลย!'}<br /><br />
                 แล้วตอนนี้ <strong>ทำงานสายอะไร?</strong> 💼 อาชีพสำคัญเพราะแต่ละประเทศขาดแคลนไม่เหมือนกัน
               </BotMsg>
             </>
@@ -290,7 +282,7 @@ export function ChatSimulator() {
             </>
           )}
 
-          {/* ===== STEP 2: QUICK PROFILE ===== */}
+          {/* ===== STEP 2: QUICK PROFILE (and auto-analyze) ===== */}
           {quizStep === 2 && (
             <div className="stage-card animate-fade-in">
               <div className="stage-body space-y-3">
@@ -333,42 +325,10 @@ export function ChatSimulator() {
                 </div>
                 {quickProfile.age && quickProfile.monthlyIncome && (
                   <button onClick={confirmProfile} className="btn-primary w-full mt-2 justify-center rounded-xl py-3 text-sm animate-fade-in">
-                    ✅ ไปต่อ!
+                    🔍 วิเคราะห์เลย!
                   </button>
                 )}
               </div>
-            </div>
-          )}
-
-          {/* User filled profile */}
-          {quizStep >= 3 && (
-            <>
-              <UserMsg>
-                อายุ {quickProfile.age} | เงินเดือน ฿{parseInt(quickProfile.monthlyIncome || '0').toLocaleString()} | {quickProfile.family === 'single' ? 'ไปคนเดียว' : quickProfile.family === 'couple' ? 'ไปกับคนรัก' : 'ไปทั้งครอบครัว'}
-              </UserMsg>
-              <BotMsg>
-                อีกนิดเดียว! 🏁 <strong>อะไรสำคัญที่สุด</strong>สำหรับชีวิตใหม่?<br />
-                เลือก 2-3 อัน — จะใช้ match ประเทศที่เหมาะกับคุณ
-              </BotMsg>
-            </>
-          )}
-
-          {/* ===== STEP 3: PRIORITIES ===== */}
-          {quizStep === 3 && (
-            <div className="animate-fade-in">
-              <div className="options-grid">
-                {PRIORITIES.map(p => (
-                  <button key={p.id} onClick={() => togglePriority(p.id)}
-                    className={`chat-option-btn ${priorities.includes(p.id) ? 'selected' : ''}`}>
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-              {priorities.length >= 2 && (
-                <button onClick={startAnalyzing} className="btn-primary w-full mt-3 justify-center rounded-xl py-3 text-sm">
-                  🔍 วิเคราะห์เลย! ({priorities.length} ด้าน)
-                </button>
-              )}
             </div>
           )}
 
@@ -389,7 +349,7 @@ export function ChatSimulator() {
             <div className="text-5xl mb-4 analyzing-globe">🌍</div>
             <div className="text-xl font-bold text-gray-800 mb-2">กำลังวิเคราะห์ {COUNTRIES.length} ประเทศ...</div>
             <div className="text-sm text-gray-500 mb-4">
-              เทียบ {priorities.length} priorities × {motivations.length} motivations × อาชีพ {OCCUPATIONS.find(o => o.id === occupation)?.labelTH}
+              เทียบ {goals.length} goals × อาชีพ {OCCUPATIONS.find(o => o.id === occupation)?.labelTH} × {COUNTRIES.length} ประเทศ
             </div>
             <div className="analyzing-bar">
               <div className="analyzing-bar-fill" />

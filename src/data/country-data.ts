@@ -56,54 +56,22 @@ export const OCCUPATIONS = [
   { id: 'other', label: '📋 อื่นๆ', labelTH: 'อื่นๆ' },
 ] as const
 
-// ===== MOTIVATION OPTIONS =====
-export const MOTIVATIONS = [
-  { id: 'politics', label: '😤 เบื่อการเมือง ไม่เห็นทางเจริญ', emoji: '😤' },
-  { id: 'money', label: '💸 เงินน้อย ทำงานหนักแต่เก็บไม่อยู่', emoji: '💸' },
-  { id: 'work-life', label: '😩 Work-life balance แย่มาก', emoji: '😩' },
-  { id: 'education', label: '🎓 อยากให้ลูกได้เรียนดีๆ', emoji: '🎓' },
-  { id: 'healthcare', label: '🏥 อยากได้สวัสดิการ ระบบดีๆ', emoji: '🏥' },
-  { id: 'adventure', label: '🌏 อยากลองใช้ชีวิตใหม่', emoji: '🌏' },
-  { id: 'safety', label: '🛡️ อยากอยู่ที่ปลอดภัย สงบ', emoji: '🛡️' },
-  { id: 'retirement', label: '🏖️ วางแผนเกษียณต่างประเทศ', emoji: '🏖️' },
+// ===== GOALS (combined motivation + priority — ถามทีเดียว เลือก 1-3) =====
+export const GOALS = [
+  { id: 'money-job', label: '💰 เงินดี หางานง่าย เก็บเงินได้', emoji: '💰', response: 'จริงจริง 💸 ค่าแรงไทยต่ำเทียบค่าครองชีพ เดี๋ยวคำนวณตัวเลขจริงให้ดู' },
+  { id: 'balance', label: '⚖️ Work-life balance ดี ปลอดภัย', emoji: '⚖️', response: 'บอกเลย! 😩 เลิก 5 โมงคือเลิก กฎหมายแรงงานเข้ม ไม่มี OT ไม่จ่าย' },
+  { id: 'family', label: '🎓 ลูกเรียนดี สวัสดิการครบ', emoji: '🎓', response: 'เรื่องลูกเข้าใจเลย 🎓 โรงเรียนรัฐดี Healthcare ฟรี ไม่ต้องจ่ายเพิ่ม' },
+  { id: 'stable', label: '🛡️ การเมืองมั่นคง ระบบเป๊ะ', emoji: '🛡️', response: 'สำคัญมาก 🛡️ ไปอยู่ที่ระบบเวิร์ค ภาษีจ่ายเห็นผลจริง ชีวิตเปลี่ยน' },
+  { id: 'lifestyle', label: '☀️ อากาศดี เกษียณสบาย ย้ายง่าย', emoji: '☀️', response: 'ชอบ! 🌏 ชีวิตสั้น ถ้าไม่ลองตอนนี้ แล้วจะลองตอนไหน' },
 ] as const
 
-// ===== PRIORITY OPTIONS =====
-export const PRIORITIES = [
-  { id: 'cost', label: '💰 ค่าครองชีพถูก', criterion: 'costOfLiving' as keyof CountryScores },
-  { id: 'safety', label: '🛡️ ปลอดภัย', criterion: 'safety' as keyof CountryScores },
-  { id: 'healthcare', label: '🏥 สาธารณสุขดี', criterion: 'healthcare' as keyof CountryScores },
-  { id: 'education', label: '🎓 การศึกษาดี', criterion: 'education' as keyof CountryScores },
-  { id: 'work-life', label: '⚖️ Work-life balance', criterion: 'workLifeBalance' as keyof CountryScores },
-  { id: 'climate', label: '☀️ อากาศดี อบอุ่น', criterion: 'climate' as keyof CountryScores },
-  { id: 'immigration', label: '🛂 ย้ายเข้าง่าย', criterion: 'immigrationEase' as keyof CountryScores },
-  { id: 'tax', label: '💵 ภาษีน้อย เก็บเงินเยอะ', criterion: 'taxFriendliness' as keyof CountryScores },
-  { id: 'jobs', label: '🎯 หางานง่าย', criterion: 'jobMarket' as keyof CountryScores },
-  { id: 'stability', label: '🏛️ การเมืองมั่นคง', criterion: 'politicalStability' as keyof CountryScores },
-] as const
-
-// ===== MOTIVATION RESPONSES =====
-export const MOTIVATION_QUICK_RESPONSES: Record<string, string> = {
-  'politics': 'เข้าใจเลย 😮‍💨 หลายคนรู้สึกแบบนี้ ไปอยู่ที่ระบบเวิร์คชีวิตเปลี่ยนเลย',
-  'money': 'จริงจริง 💸 ค่าแรงไทยต่ำเทียบกับค่าครองชีพ เดี๋ยวดูตัวเลขจริงๆ ให้',
-  'work-life': 'บอกเลย! 😩 OT ไม่จ่าย boss ไลน์มาหลัง 6 โมงเย็น... ข้างนอกเค้าเลิก 5 คือเลิก',
-  'education': 'เรื่องลูกเข้าใจเลย 🎓 ระบบข้างนอก focus critical thinking ไม่ใช่ท่องจำ',
-  'healthcare': 'สำคัญมากจริงๆ 🏥 หลายประเทศมีระบบ universal healthcare ดีมาก',
-  'adventure': 'ชอบ! 🌏 ชีวิตสั้น ถ้าไม่ลองตอนนี้แล้วจะลองตอนไหน',
-  'safety': 'ปลอดภัยสำคัญที่สุด 🛡️ เดินกลางคืนไม่ต้องลุ้นนี่คือ basic ที่ควรได้',
-  'retirement': 'วางแผนดีมาก 🏖️ เกษียณที่ค่าครองชีพถูก อากาศดี ระบบดี ชีวิตสบาย',
-}
-
-// ===== MOTIVATION → CRITERIA WEIGHT MAPPING =====
-const MOTIVATION_WEIGHTS: Record<string, Partial<Record<keyof CountryScores, number>>> = {
-  'politics': { politicalStability: 3, safety: 1 },
-  'money': { jobMarket: 2, taxFriendliness: 2, costOfLiving: 1 },
-  'work-life': { workLifeBalance: 3 },
-  'education': { education: 3 },
-  'healthcare': { healthcare: 3 },
-  'adventure': { climate: 1, immigrationEase: 1 },
-  'safety': { safety: 3, politicalStability: 1 },
-  'retirement': { costOfLiving: 2, healthcare: 2, climate: 1, taxFriendliness: 1 },
+// ===== GOAL → CRITERIA WEIGHT MAPPING =====
+const GOAL_WEIGHTS: Record<string, Partial<Record<keyof CountryScores, number>>> = {
+  'money-job': { jobMarket: 4, taxFriendliness: 3, costOfLiving: 2 },
+  'balance': { workLifeBalance: 4, safety: 3 },
+  'family': { education: 4, healthcare: 3 },
+  'stable': { politicalStability: 4, safety: 2 },
+  'lifestyle': { climate: 3, immigrationEase: 3, costOfLiving: 2 },
 }
 
 // ===== OCCUPATION NOTES PER COUNTRY =====
@@ -309,33 +277,24 @@ export const COUNTRIES: Country[] = [
 
 // ===== MATCHING ALGORITHM =====
 export interface MatchParams {
-  motivations: string[]
+  goals: string[]
   occupation: string
-  priorities: string[]
   monthlyIncome: number // THB
   age: string
   family: string
 }
 
 export function matchCountries(params: MatchParams): MatchResult[] {
-  // 1. Build weight vector from motivations + priorities
+  // 1. Build weight vector from goals
   const weights: Partial<Record<keyof CountryScores, number>> = {}
 
-  for (const m of params.motivations) {
-    const mapping = MOTIVATION_WEIGHTS[m]
+  for (const g of params.goals) {
+    const mapping = GOAL_WEIGHTS[g]
     if (mapping) {
       for (const [criterion, weight] of Object.entries(mapping)) {
         const key = criterion as keyof CountryScores
         weights[key] = (weights[key] || 0) + weight
       }
-    }
-  }
-
-  // Priorities are the strongest signal (user explicitly said what matters)
-  for (const p of params.priorities) {
-    const priorityDef = PRIORITIES.find(pr => pr.id === p)
-    if (priorityDef) {
-      weights[priorityDef.criterion] = (weights[priorityDef.criterion] || 0) + 4
     }
   }
 

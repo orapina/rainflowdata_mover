@@ -13,9 +13,14 @@ import {
   calculateSimpleVisaScore,
 } from '@/data/simulator-data'
 import { searchOccupations } from '@/data/occupations'
+import {
+  chatWithGroq, analyzeResults,
+  getStoredApiKey,
+  type ChatMessage, type GatheredData,
+} from '@/lib/groq'
 
 // ===== TYPES =====
-type Phase = 'quiz' | 'analyzing' | 'countryResults' | 'auProfile' | 'sim' | 'result'
+type Phase = 'welcome' | 'quiz' | 'aiChat' | 'analyzing' | 'countryResults' | 'auProfile' | 'sim' | 'result'
 
 interface QuickProfile {
   age: string
@@ -51,9 +56,52 @@ const STAGE_META = [
 ]
 const TOTAL_STAGES = STAGE_META.length
 
+// ===== AI SYSTEM PROMPT =====
+const AI_SYSTEM_PROMPT = `คุณชื่อ "Rain" เป็นที่ปรึกษาย้ายประเทศสำหรับคนไทย พูดคุยเป็นกันเอง ไม่ใช่ทางการ ใช้ emoji บ้าง
+
+หน้าที่: คุยกับ user 3-5 ข้อความ เพื่อเข้าใจว่าเขาอยากย้ายไปไหนและทำไม แล้วเก็บข้อมูลสำหรับวิเคราะห์
+
+Goal IDs (เลือก 1-3 ที่ตรงกับสิ่งที่ user พูด):
+- money-job: อยากเงินดี หางานง่าย เก็บเงินได้
+- balance: work-life balance ดี ปลอดภัย
+- family: ลูกเรียนดี สวัสดิการครบ
+- stable: การเมืองมั่นคง ระบบเป๊ะ
+- lifestyle: อากาศดี เกษียณสบาย ย้ายง่าย
+
+Occupation IDs:
+- software: IT/Tech/AI/Data/โปรแกรมเมอร์
+- engineering: วิศวกร/ช่าง/ช่างเทคนิค
+- accounting: บัญชี/การเงิน/บริหาร/การตลาด
+- healthcare: แพทย์/พยาบาล/สาธารณสุข
+- chef: เชฟ/พ่อครัว/โรงแรม/Hospitality
+- other: ครู/ดีไซน์/อื่นๆ
+
+ข้อมูลที่ต้องเก็บ:
+- goals: array ของ 1-3 Goal IDs
+- occupation: 1 Occupation ID
+- monthlyIncome: เงินเดือน (บาท/เดือน, number)
+- age: "18-24" | "25-32" | "33-39" | "40-44" | "45+"
+- family: "single" | "couple" | "family"
+
+วิธีคุย:
+1. เริ่มถามว่าอะไรทำให้คิดอยากย้ายประเทศ
+2. ฟังแล้ว identify goals จากสิ่งที่พูด
+3. ถามเรื่องงาน/อาชีพ
+4. ถามข้อมูลพื้นฐาน (อายุ, เงินเดือน, ไปคนเดียว/คู่/ครอบครัว)
+5. เมื่อมีข้อมูลครบ set ready: true
+
+ข้อสำคัญ:
+- ถามทีละ 1-2 คำถาม อย่าถามรวมหมด
+- ถ้า user บอกไม่ครบ ก็ถามเพิ่ม
+- ตอบสั้นกระชับ 1-3 ประโยค
+- เมื่อครบแล้ว สรุปสิ่งที่เข้าใจก่อน set ready: true
+
+ตอบเป็น JSON เสมอ:
+{"message": "ข้อความภาษาไทย", "gathered": {"goals": [], "occupation": "", "monthlyIncome": 0, "age": "", "family": "", "ready": false}}`
+
 // ===== MAIN COMPONENT =====
 export function ChatSimulator() {
-  const [phase, setPhase] = useState<Phase>('quiz')
+  const [phase, setPhase] = useState<Phase>('welcome')
 
   // Quiz state
   const [quizStep, setQuizStep] = useState(0)
@@ -81,11 +129,104 @@ export function ChatSimulator() {
   const [occSearchQuery, setOccSearchQuery] = useState('')
   const [occDisplayLabel, setOccDisplayLabel] = useState('')
 
+  // AI Chat state
+  const [aiMode, setAiMode] = useState(false)
+  const [apiKey] = useState(getStoredApiKey())
+  const [aiMessages, setAiMessages] = useState<{ role: 'user' | 'bot'; text: string }[]>([])
+  const [aiChatHistory, setAiChatHistory] = useState<ChatMessage[]>([])
+  const [aiInput, setAiInput] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiGathered, setAiGathered] = useState<GatheredData>({ goals: [], occupation: '', monthlyIncome: 0, age: '', family: '', ready: false })
+  const [aiAnalysis, setAiAnalysis] = useState('')
+  const [aiError, setAiError] = useState('')
+
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 200)
-  }, [quizStep, phase, simStage])
+  }, [quizStep, phase, simStage, aiMessages.length])
+
+  // Init: auto-start AI mode
+  useEffect(() => {
+    // Auto launch AI chat on first load
+    if (phase === 'welcome' && apiKey) {
+      startAiChat()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // ===== AI HANDLERS =====
+  const startAiChat = () => {
+    setAiMode(true)
+    setPhase('aiChat')
+    const greeting = 'สวัสดีจ้า! 👋 ฉันชื่อ Rain — ที่ปรึกษาย้ายประเทศของคุณ\n\nเล่าให้ฟังหน่อยสิ ทำไมถึงคิดอยากย้ายไปอยู่ต่างประเทศ? 🌍'
+    setAiMessages([{ role: 'bot', text: greeting }])
+    setAiChatHistory([{ role: 'system', content: AI_SYSTEM_PROMPT }, { role: 'assistant', content: JSON.stringify({ message: greeting, gathered: { goals: [], occupation: '', monthlyIncome: 0, age: '', family: '', ready: false } }) }])
+  }
+
+  const sendAiMessage = async () => {
+    if (!aiInput.trim() || aiLoading) return
+    const userText = aiInput.trim()
+    setAiInput('')
+    setAiError('')
+    setAiMessages(prev => [...prev, { role: 'user', text: userText }])
+    setAiLoading(true)
+
+    const newHistory: ChatMessage[] = [...aiChatHistory, { role: 'user', content: userText }]
+    setAiChatHistory(newHistory)
+
+    try {
+      const aiRes = await chatWithGroq(apiKey, newHistory)
+      setAiMessages(prev => [...prev, { role: 'bot', text: aiRes.message }])
+      setAiChatHistory(prev => [...prev, { role: 'assistant', content: JSON.stringify(aiRes) }])
+      setAiGathered(aiRes.gathered)
+
+      // If ready, trigger country matching
+      if (aiRes.gathered.ready) {
+        setTimeout(() => {
+          setGoals(aiRes.gathered.goals)
+          setOccupation(aiRes.gathered.occupation)
+          setQuickProfile({
+            age: aiRes.gathered.age,
+            monthlyIncome: String(aiRes.gathered.monthlyIncome),
+            savings: '',
+            family: aiRes.gathered.family,
+          })
+          setPhase('analyzing')
+          setTimeout(() => {
+            const params: MatchParams = {
+              goals: aiRes.gathered.goals,
+              occupation: aiRes.gathered.occupation,
+              monthlyIncome: aiRes.gathered.monthlyIncome,
+              age: aiRes.gathered.age,
+              family: aiRes.gathered.family,
+            }
+            const results = matchCountries(params)
+            setMatchResults(results)
+            // Run AI analysis
+            runAiAnalysis(aiRes.gathered, results)
+            setPhase('countryResults')
+          }, 2500)
+        }, 1500)
+      }
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด')
+      setAiLoading(false)
+      return
+    }
+    setAiLoading(false)
+  }
+
+  const runAiAnalysis = async (gathered: GatheredData, results: MatchResult[]) => {
+    try {
+      const userCtx = `เป้าหมาย: ${gathered.goals.join(', ')}, อาชีพ: ${gathered.occupation}, เงินเดือน: ${gathered.monthlyIncome} บาท, อายุ: ${gathered.age}, ไป: ${gathered.family}`
+      const resultsCtx = results.map((r, i) => `${i + 1}. ${r.country.nameTH} (${r.matchPct}%) — ${r.highlights.join(', ')}`).join('\\n')
+      const analysis = await analyzeResults(apiKey, userCtx, resultsCtx)
+      setAiAnalysis(analysis)
+    } catch {
+      // fail silently — analysis is optional
+    }
+  }
 
   // ===== DERIVED (AU SIMULATION) =====
   const auOccKey = occupation // new 6 IDs map directly to AU_SALARIES keys
@@ -210,11 +351,121 @@ export function ChatSimulator() {
   const pick = (stageId: string, optionId: string) => { setChoices(prev => ({ ...prev, [stageId]: optionId })); setSimStage(s => s + 1) }
 
   const restart = () => {
-    setPhase('quiz'); setQuizStep(0); setGoals([]); setOccupation('')
+    setPhase('welcome'); setQuizStep(0); setGoals([]); setOccupation('')
     setQuickProfile({ age: '', monthlyIncome: '', savings: '', family: 'single' })
     setMatchResults([]); setSelectedCountry(''); setExpandedCountry('')
     setAuProfile({ english: '', experience: '', education: '', thaiSalary: '', city: 'melbourne' })
     setSimStage(0); setSavingsInput(''); setIsMotherLord(false); setInitialAUD(0); setChoices({})
+    setAiMessages([]); setAiChatHistory([]); setAiInput(''); setAiGathered({ goals: [], occupation: '', monthlyIncome: 0, age: '', family: '', ready: false })
+    setAiAnalysis(''); setAiError(''); setOccDisplayLabel(''); setAiMode(false)
+    // Re-start AI chat after reset
+    setTimeout(() => {
+      setAiMode(true)
+      setPhase('aiChat')
+      const greeting = 'สวัสดีอีกครั้ง! 👋 เล่าใหม่ได้เลยนะ ทำไมถึงอยากย้ายประเทศ? 🌍'
+      setAiMessages([{ role: 'bot', text: greeting }])
+      setAiChatHistory([{ role: 'system', content: AI_SYSTEM_PROMPT }, { role: 'assistant', content: JSON.stringify({ message: greeting, gathered: { goals: [], occupation: '', monthlyIncome: 0, age: '', family: '', ready: false } }) }])
+    }, 100)
+  }
+
+  // ================================================================
+  // ===== RENDER: WELCOME =====
+  // ================================================================
+  if (phase === 'welcome') {
+    return (
+      <div className="sim-container">
+        <div className="sim-scroll flex flex-col items-center justify-center min-h-[450px]">
+          <div className="text-center animate-fade-in">
+            <div className="text-5xl mb-4">🌍</div>
+            <div className="text-2xl font-bold text-gray-800 mb-2">คุณเหมาะจะย้ายไปประเทศไหน?</div>
+            <div className="text-sm text-gray-500 mb-8">AI วิเคราะห์จาก 14 ประเทศ — เงินเดือน วีซ่า ค่าครองชีพจริง</div>
+
+            <button onClick={startAiChat} className="btn-primary w-full justify-center rounded-xl py-4 text-base mb-3">
+              🤖 เริ่มคุยกับ AI วิเคราะห์
+            </button>
+
+            <button onClick={() => setPhase('quiz')} className="w-full py-3 rounded-xl border-2 border-gray-200 text-gray-500 hover:bg-gray-50 text-sm font-medium">
+              📋 ใช้แบบกดเลือก (ไม่ใช้ AI)
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ================================================================
+  // ===== RENDER: AI CHAT =====
+  // ================================================================
+  if (phase === 'aiChat') {
+    return (
+      <div className="sim-container">
+        <div className="sim-scroll">
+          {/* Chat messages */}
+          {aiMessages.map((msg, i) => (
+            msg.role === 'bot'
+              ? <BotMsg key={i}>{msg.text}</BotMsg>
+              : <UserMsg key={i}>{msg.text}</UserMsg>
+          ))}
+
+          {/* Loading indicator */}
+          {aiLoading && (
+            <div className="chat-bubble bot animate-fade-in">
+              <span className="bot-avatar">🤖</span>
+              <div className="bubble-content ai-typing">
+                <span className="dot" /><span className="dot" /><span className="dot" />
+              </div>
+            </div>
+          )}
+
+          {/* Gathered info badges */}
+          {(aiGathered.goals.length > 0 || aiGathered.occupation) && (
+            <div className="ai-gathered animate-fade-in">
+              {aiGathered.goals.length > 0 && <span className="ai-badge">🎯 {aiGathered.goals.length} goals</span>}
+              {aiGathered.occupation && <span className="ai-badge">💼 {aiGathered.occupation}</span>}
+              {aiGathered.monthlyIncome > 0 && <span className="ai-badge">💰 {aiGathered.monthlyIncome.toLocaleString()}฿</span>}
+              {aiGathered.age && <span className="ai-badge">📅 {aiGathered.age}</span>}
+              {aiGathered.family && <span className="ai-badge">👥 {aiGathered.family}</span>}
+            </div>
+          )}
+
+          {/* Error */}
+          {aiError && (
+            <div className="ai-error animate-fade-in">
+              ⚠️ {aiError}
+            </div>
+          )}
+
+          {/* Ready indicator */}
+          {aiGathered.ready && (
+            <div className="text-center py-4 animate-fade-in">
+              <div className="text-lg font-bold text-green-600">✅ ได้ข้อมูลครบแล้ว!</div>
+              <div className="text-sm text-gray-500">กำลังวิเคราะห์ 14 ประเทศให้คุณ...</div>
+            </div>
+          )}
+
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Input bar */}
+        {!aiGathered.ready && (
+          <div className="ai-input-bar">
+            <input
+              type="text"
+              value={aiInput}
+              onChange={e => setAiInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && sendAiMessage()}
+              placeholder="พิมพ์ข้อความ..."
+              className="ai-text-input"
+              disabled={aiLoading}
+              autoFocus
+            />
+            <button onClick={sendAiMessage} disabled={aiLoading || !aiInput.trim()} className="ai-send-btn">
+              ➤
+            </button>
+          </div>
+        )}
+      </div>
+    )
   }
 
   // ================================================================
@@ -512,6 +763,14 @@ export function ChatSimulator() {
                   ลองดูข้อมูลออสอยู่ดีไหม?
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* AI Analysis */}
+          {aiMode && aiAnalysis && (
+            <div className="ai-analysis-card animate-fade-in mt-4">
+              <div className="text-sm font-bold text-gray-800 mb-2">🤖 AI วิเคราะห์ให้คุณ</div>
+              <div className="text-sm text-gray-700 whitespace-pre-wrap">{aiAnalysis}</div>
             </div>
           )}
 

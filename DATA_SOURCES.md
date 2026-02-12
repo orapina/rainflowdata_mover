@@ -5,10 +5,14 @@
 ## ✅ Verified Data (16 Countries)
 
 ### 🇦🇺 Australia
-- **Visa Fees**: Home Affairs (Jan 2026)
+- **Visa Fees**: Home Affairs (Feb 2026)
 - **Salaries**: PayScale AU, SEEK (Feb 2026)
 - **Cost of Living**: Numbeo (Feb 2026)
-- **Notes**: Skills Independent 189 visa ข้อมูลอัปเดตหลังจาก Perplexity fact-check
+- **Visa Options**:
+  - **482 TSS** (Most popular): $1,455-3,035 single | Employer-sponsored, NO points required
+  - **186 ENS**: $4,240-4,765 single | Permanent, employer-sponsored
+  - **189 Skilled**: $4,765 single | Permanent, independent (65+ points)
+- **Notes**: Updated with 482/186/189 pathways. 482 → 186 TRT after 3 years most common route.
 
 ### 🇨🇦 Canada
 - **Visa Fees**: IRCC (Dec 2025)
@@ -108,6 +112,11 @@
 **Complete visa costs, salaries, living costs for 16 countries**
 - 16 countries with full details (was 12, added PT, KR, CH, JP)
 - Visa costs (single, couple, family)
+### `src/data/country-detailed-data.ts`
+**Complete visa costs, salaries by occupation, cost of living breakdown, PR paths**
+- 16 countries with full details
+- **Multiple visa pathways** (e.g., AU: 482 TSS, 186 ENS, 189 Skilled)
+- Visa costs (single, couple, family) for each pathway
 - Salaries by occupation (entry, mid, senior)
 - Cost of living by city
 - PR timeline & difficulty
@@ -122,7 +131,7 @@ Country matching algorithm
 
 ### `src/data/simulator-data.ts`
 Australia-Thailand comparison simulator
-- Updated visa costs: 189 visa $4,765/$7,150/$8,545 (Jan 2026)
+- **NOTE**: Simulator uses 189 visa ($4,765) as baseline (needs update to show 482/186 options)
 - Exchange rate: 22.10 THB/AUD (Feb 2026 average)
 - Salaries, living costs, tax calculations
 
@@ -132,15 +141,17 @@ Australia-Thailand comparison simulator
 
 ### ✅ Perplexity Fact-Check (Feb 12, 2026)
 All data verified against official sources:
-1. ✅ AU visa costs corrected (189: $4,765/$7,150/$8,545)
+1. ✅ AU visa costs updated: 482 TSS ($1,455-3,035), 186 ENS ($4,240-4,765), 189 ($4,765)
 2. ✅ Exchange rate updated (22.10 THB/AUD)
 3. ✅ Thai insurance updated (฿2,500/month)
 4. ✅ Food costs adjusted (+$100/level)
 5. ✅ Transport costs verified ($850 car)
 6. ✅ Software salary confirmed ($75K entry)
+7. ✅ Added 482 TSS as primary pathway (employer-sponsored, NO points required!)
 
 ### 📊 Coverage
-- **Complete data**: 16 countries (AU, CA, UK, NZ, DE, SG, SE, UAE, NO, NL, IE, US, PT, KR, CH, JP)
+- **Complete data**: 16 countries with full official visa/salary/living cost data
+- **Australia**: ✅ Updated with 482 TSS/186 ENS/189 Skilled pathways (Feb 2026)
 - **Missing**: None for popular migration destinations
 
 ---

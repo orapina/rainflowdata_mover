@@ -87,11 +87,11 @@ export const AUSTRALIA: CountryDetailedData = {
   flag: '🇦🇺',
   
   visaCosts: {
-    single: 4765,
-    couple: 7150,
-    family: 8545,
+    single: 1455,
+    couple: 2910,
+    family: 3640,
     currency: 'AUD',
-    notes: 'Skilled Independent 189 visa fees (Jan 2026)',
+    notes: '482 TSS Short-term (2 yrs): $1,455/$2,910/$3,640 | Medium-term (4 yrs): $3,035/$6,070/$7,595 | 186 ENS Direct: $4,765/$7,150/$8,545 | 186 TRT: $4,240 | 189 Skilled: $4,765/$7,150/$8,545. Most popular: 482 (employer-sponsored, no points!)',
     source: 'Home Affairs',
     lastUpdated: 'Feb 2026',
   },
@@ -115,7 +115,7 @@ export const AUSTRALIA: CountryDetailedData = {
     minYears: 3,
     maxYears: 5,
     difficulty: 'medium',
-    notes: '189 visa is direct PR. 491 regional requires 3 years in regional area.',
+    notes: '482 TSS → 186 TRT (3 yrs work required). 189 direct PR but needs 65+ points. 491 regional requires 3 yrs.',
   },
   
   keyBenefits: [
@@ -123,14 +123,14 @@ export const AUSTRALIA: CountryDetailedData = {
     'Medicare free healthcare',
     'Strong job market for skilled workers',
     'Large Thai community',
-    'Clear points-based system',
+    '482 visa: No points required, just job offer!',
   ],
   
   keyChallenges: [
     'Very expensive (Sydney/Melbourne)',
     'Far from Thailand (~9 hours)',
-    'High visa cost',
-    'Competitive points system (65+ required)',
+    '189/186 visa expensive, but 482 affordable',
+    '189 Skilled: Competitive points system (65+)',
   ],
   
   officialSources: {

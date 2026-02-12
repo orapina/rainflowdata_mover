@@ -108,6 +108,20 @@ const OCCUPATION_NOTES: Record<string, Record<string, string>> = {
     accounting: '✅ Financial hub — บัญชี/บริหารมี demand',
     default: 'ℹ️ Employment Pass ขั้นต่ำ $5,000/เดือน',
   },
+  uae: {
+    software: '✅ Tech hub ของ Middle East — Dubai Internet City, salary ดี',
+    engineering: '✅ Construction/Oil & Gas demand สูง — tax-free income',
+    accounting: '✅ Financial hub — บัญชี/บริหารมี demand',
+    healthcare: '✅ Nurses & doctors ขาด — salary competitive',
+    default: 'ℹ️ Employment Visa 2 ปี หรือ Golden Visa 10 ปี',
+  },
+  norway: {
+    software: '✅ Tech demand ดี — Bergen/Oslo hubs, เงินเดือนสูงยุโรป',
+    engineering: '🔥 Oil & Gas engineering demand สูง — offshore + onshore',
+    healthcare: '🔥 Nurses/doctors ขาดมาก — fast PR track',
+    trades: '✅ Electrician/plumber demand ดี — เงินเดือนสูง',
+    default: 'ℹ️ Skilled Worker Permit — Norwegian helpful long-term',
+  },
 }
 
 function getOccupationNote(countryId: string, occupation: string): string {
@@ -224,6 +238,26 @@ export const COUNTRIES: Country[] = [
     visaPaths: ['Work Permit', 'EU Blue Card'],
     pros: ['Work-life balance ดีที่สุดในโลก', 'Education ฟรีทุกระดับ', 'Parental leave 480 วัน!', 'สวัสดิการครบ'],
     cons: ['ภาษีสูงมาก 50%+', 'มืดยาว+หนาวจัด ❄️', 'ภาษาสวีเดนต้องเรียน'],
+    thaiCommunity: 'small',
+  },
+  {
+    id: 'uae', name: 'UAE (Dubai)', nameTH: 'ดูไบ', flag: '🇦🇪',
+    scores: { costOfLiving: 5, safety: 9, healthcare: 8, education: 7, workLifeBalance: 5, taxFriendliness: 10, immigrationEase: 7, jobMarket: 8, climate: 4, politicalStability: 8 },
+    avgSalaryUSD: 55000, costIndex: 250,
+    hotJobs: ['software', 'data-ai', 'engineering', 'accounting', 'healthcare'],
+    visaPaths: ['Employment Visa 2-year', 'Golden Visa 10-year'],
+    pros: ['ไม่มีภาษีเงินได้! 🎉', 'เก็บเงินได้เยอะ', 'ปลอดภัยมาก', 'ใกล้ไทย 6 ชม.', 'ทันสมัย'],
+    cons: ['ร้อนมาก 45°C+ ☀️', 'วีซ่าผูกกับนายจ้าง', 'ไม่มี PR แบบปกติ', 'ค่าครองชีพสูงถ้าใช้ชีวิต western'],
+    thaiCommunity: 'large',
+  },
+  {
+    id: 'norway', name: 'Norway', nameTH: 'นอร์เวย์', flag: '🇳🇴',
+    scores: { costOfLiving: 2, safety: 10, healthcare: 10, education: 9, workLifeBalance: 9, taxFriendliness: 4, immigrationEase: 5, jobMarket: 7, climate: 2, politicalStability: 10 },
+    avgSalaryUSD: 70000, costIndex: 300,
+    hotJobs: ['software', 'engineering', 'data-ai', 'healthcare', 'trades'],
+    visaPaths: ['Skilled Worker Permit', 'Permanent Residence'],
+    pros: ['เงินเดือนสูงสุดยุโรป', 'ธรรมชาติสวยมาก 🏔️', 'Healthcare ฟรี', 'Work-life ดีมาก', '5 สัปดาห์ลา'],
+    cons: ['แพงที่สุดยุโรป', 'หนาวจัด -20°C ❄️', 'มืดยาวในหน้าหนาว', 'ราคาแอลกอฮอล์สูงมาก'],
     thaiCommunity: 'small',
   },
   {

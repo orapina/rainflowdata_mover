@@ -333,9 +333,12 @@ export function ChatSimulator() {
     if (aiLoading || aiGathered.ready || aiMessages.length < 1) return 'none'
     // Goals phase: let user type freely first, then show confirm chips
     if (aiGathered.goals.length === 0) {
-      // After 1+ user message without goals detected, show chips as fallback
+      // Show goal chips after 1+ exchange, but only if last bot message isn't an off-topic rejection
       const userMsgCount = aiMessages.filter(m => m.role === 'user').length
-      return userMsgCount >= 1 ? 'goals' : 'none'
+      if (userMsgCount < 1) return 'none'
+      const lastBotMsg = [...aiMessages].reverse().find(m => m.role === 'bot')
+      if (lastBotMsg && lastBotMsg.text.includes('Catto ช่วยไม่ได้')) return 'none'
+      return 'goals'
     }
     // Goals detected but not confirmed: show remaining goals + "ไปต่อ"
     if (!goalsConfirmed) return 'goals-confirm'
@@ -544,7 +547,7 @@ export function ChatSimulator() {
           {/* ===== GOALS: multi-select chips (fallback if AI didn't detect) ===== */}
           {chipMode === 'goals' && (
             <div className="quick-replies animate-fade-in">
-              <div className="chip-hint">กดเลือกเพิ่มได้ หรือพิมพ์เองก็ได้ 1-3 ข้อ ✨</div>
+              <div className="chip-hint">🎯 เลือกสิ่งที่สำคัญกับคุณ 1-3 ข้อ (มีผลต่อการจัดอันดับประเทศ)</div>
               <div className="chip-grid">
                 {Object.entries(GOAL_LABELS).map(([id, label]) => (
                   <button
@@ -1003,6 +1006,35 @@ export function ChatSimulator() {
                   {/* Expanded details */}
                   {isExpanded && (
                     <div className="country-expanded animate-fade-in">
+                      {/* Score breakdown */}
+                      <div className="text-xs font-semibold text-gray-600 mb-1">📊 คะแนนแต่ละด้าน (1-10):</div>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 mb-2 text-[11px]">
+                        {([
+                          ['jobMarket', '💼 ตลาดงาน'],
+                          ['workLifeBalance', '⚖️ Work-life'],
+                          ['safety', '🛡️ ปลอดภัย'],
+                          ['healthcare', '🏥 สาธารณสุข'],
+                          ['education', '🎓 การศึกษา'],
+                          ['politicalStability', '🏛️ การเมือง'],
+                          ['costOfLiving', '💰 ค่าครองชีพ'],
+                          ['taxFriendliness', '🧾 ภาษี'],
+                          ['climate', '☀️ อากาศ'],
+                          ['immigrationEase', '✈️ ย้ายง่าย'],
+                        ] as const).map(([key, label]) => {
+                          const val = result.country.scores[key as keyof typeof result.country.scores]
+                          const barColor = val >= 8 ? 'bg-green-400' : val >= 6 ? 'bg-blue-400' : val >= 4 ? 'bg-yellow-400' : 'bg-red-400'
+                          return (
+                            <div key={key} className="flex items-center gap-1">
+                              <span className="w-20 text-gray-500 truncate">{label}</span>
+                              <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                <div className={`h-full ${barColor} rounded-full`} style={{ width: `${val * 10}%` }} />
+                              </div>
+                              <span className="w-4 text-right text-gray-400">{val}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      <div className="text-[10px] text-gray-400 mb-2">📚 คะแนนจาก: OECD Better Life Index, Numbeo, Global Peace Index, UNDP HDR, Fragile States Index 2024-25</div>
                       <div className="text-xs font-semibold text-gray-600 mb-1">วีซ่าที่เป็นไปได้:</div>
                       <div className="text-xs text-gray-500 mb-2">{result.country.visaPaths.join(' • ')}</div>
                       <div className="text-xs font-semibold text-gray-600 mb-1">ข้อดี:</div>

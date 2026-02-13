@@ -3,10 +3,11 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import {
   AUD_TO_THB, calculateAusTax, calculateThaiTax,
-  AU_SALARIES, AU_UNSKILLED_SALARY, TH_TOTAL_LIVING,
+  AU_UNSKILLED_SALARY, TH_TOTAL_LIVING, TH_LIVING_COSTS,
   AU_CITIES, FOOD_COSTS, TRANSPORT_COSTS,
   calculateSimpleVisaScore,
 } from '@/data/simulator-data'
+import { occupations, POPULAR_OCCUPATIONS, searchOccupations } from '@/data/occupations'
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ''
 
@@ -34,22 +35,13 @@ const STAGE_META = [
 ]
 const TOTAL_STAGES = STAGE_META.length
 
-const OCCUPATIONS = [
-  { id: 'software', label: '💻 IT / Software' },
-  { id: 'data-ai', label: '🤖 Data / AI' },
-  { id: 'engineering', label: '⚙️ Engineering' },
-  { id: 'accounting', label: '📊 Accounting' },
-  { id: 'healthcare', label: '🏥 Healthcare' },
-  { id: 'chef', label: '👨‍🍳 Chef / Hospitality' },
-  { id: 'trades', label: '🔧 Trades (ช่าง)' },
-  { id: 'other', label: '📦 อื่นๆ' },
-]
+// Occupation data imported from @/data/occupations (65+ real occupations with PayScale salary data)
 
 export function AuLifeSim() {
   const [phase, setPhase] = useState<'profile' | 'sim' | 'result'>('profile')
   const [profile, setProfile] = useState<Profile>({
     age: '', english: '', experience: '', education: '',
-    thaiSalary: '', city: 'melbourne', family: 'single', occupation: 'software',
+    thaiSalary: '50000', city: 'melbourne', family: 'single', occupation: '',
   })
 
   // Sim state
@@ -58,6 +50,7 @@ export function AuLifeSim() {
   const [isMotherLord, setIsMotherLord] = useState(false)
   const [initialAUD, setInitialAUD] = useState(0)
   const [choices, setChoices] = useState<Record<string, string>>({})
+  const [occSearch, setOccSearch] = useState('')
 
   const bottomRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -65,17 +58,23 @@ export function AuLifeSim() {
   }, [simStage, phase])
 
   const up = (field: keyof Profile, val: string) => setProfile(p => ({ ...p, [field]: val }))
-  const allFilled = profile.age && profile.english && profile.experience && profile.education && profile.thaiSalary
+  const allFilled = profile.age && profile.english && profile.experience && profile.education && profile.thaiSalary && profile.occupation
   const startSim = () => { if (allFilled) setPhase('sim') }
 
   // ===== Derived =====
   const city = AU_CITIES[profile.city] || AU_CITIES['melbourne']
-  const salaryData = AU_SALARIES[profile.occupation] || AU_SALARIES['other']
+  const selectedOcc = occupations[profile.occupation]
+  const salaryP10 = selectedOcc?.salaryRange.p10 || 60000
+  const salaryMedian = selectedOcc?.salaryRange.median || 75000
+  const salaryP90 = selectedOcc?.salaryRange.p90 || 95000
+  const salaryLabel = selectedOcc?.title || 'อาชีพทั่วไป'
+  const salarySourceUrl = selectedOcc?.salarySourceUrl || ''
+  const salarySource = selectedOcc?.salarySource || ''
 
   const preDepartureCosts = useMemo(() => {
     const visa = profile.family === 'family' ? 8595 : profile.family === 'couple' ? 7365 : 4910
     return [
-      { label: '📋 Visa Application Fee (189)', aud: visa, source: 'Home Affairs' },
+      { label: '📋 Visa ทำงาน (Skilled/Sponsored)', aud: visa, source: 'Home Affairs' },
       { label: '📝 Skills Assessment', aud: 1000, source: 'ACS/VETASSESS' },
       { label: '📖 IELTS/PTE สอบภาษา', aud: 400, source: 'IELTS.org' },
       { label: '🏥 ตรวจสุขภาพ Medical', aud: 400, source: 'Bupa/HAP' },
@@ -84,7 +83,7 @@ export function AuLifeSim() {
   }, [profile.family])
   const preDepartureTotal = preDepartureCosts.reduce((s, c) => s + c.aud, 0)
 
-  const grossAnnual = choices['job'] === 'top' ? salaryData.senior : choices['job'] === 'min' ? AU_UNSKILLED_SALARY : salaryData.mid
+  const grossAnnual = choices['job'] === 'p90' ? salaryP90 : choices['job'] === 'p10' ? salaryP10 : choices['job'] === 'min' ? AU_UNSKILLED_SALARY : salaryMedian
   const monthlyRent = choices['housing'] === 'share' ? city.rentShare : choices['housing'] === '2bed' ? (profile.family === 'family' ? city.rentFamily : city.rent2br) : city.rent1br
   const bond = monthlyRent
   const flightCost = choices['flight'] === 'business' ? (profile.family === 'single' ? 4500 : profile.family === 'couple' ? 9000 : 13500) : choices['flight'] === 'company' ? 0 : (profile.family === 'single' ? 1100 : profile.family === 'couple' ? 2200 : 3500)
@@ -114,7 +113,7 @@ export function AuLifeSim() {
   const monthlySavings = monthlyNet - totalMonthlyExp
   const monthlySavingsTHB = Math.round(monthlySavings * AUD_TO_THB)
 
-  const thaiSalary = parseInt(profile.thaiSalary) || 40000
+  const thaiSalary = parseInt(profile.thaiSalary) || 50000
   const thaiTax = calculateThaiTax(thaiSalary * 12)
   const thaiNetMonthly = thaiTax.netMonthly
   const thaiMonthlySavings = thaiNetMonthly - TH_TOTAL_LIVING
@@ -158,13 +157,53 @@ export function AuLifeSim() {
           </div>
 
           <div className="space-y-3">
+            {/* Occupation picker */}
+            <div>
+              <label className="form-label">💼 อาชีพ</label>
+              {profile.occupation ? (
+                <div className="flex items-center gap-2 p-2.5 bg-blue-50 border border-blue-200 rounded-lg">
+                  <span className="font-medium text-sm text-blue-800">
+                    {selectedOcc?.title || 'อาชีพทั่วไป (Other)'}
+                  </span>
+                  <button onClick={() => { up('occupation', ''); setOccSearch('') }} className="text-xs text-blue-600 underline ml-auto">เปลี่ยน</button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    {POPULAR_OCCUPATIONS.map(p => (
+                      <button key={p.key} onClick={() => up('occupation', p.key)}
+                        className="px-2.5 py-1.5 text-xs rounded-full bg-gray-100 hover:bg-blue-100 hover:border-blue-300 transition-colors border border-gray-200">
+                        {p.emoji} {occupations[p.key]?.title}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="relative">
+                    <input type="text" className="form-input text-sm" placeholder="🔍 ค้นหาอาชีพอื่น..."
+                      value={occSearch} onChange={e => setOccSearch(e.target.value)} />
+                    {occSearch.length >= 2 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {searchOccupations(occSearch).map(r => (
+                          <button key={r.key} onClick={() => { up('occupation', r.key); setOccSearch('') }}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 border-b border-gray-100 last:border-b-0">
+                            <span className="font-medium">{r.title}</span>
+                            <span className="text-xs text-gray-400 ml-2">{r.category}</span>
+                          </button>
+                        ))}
+                        {searchOccupations(occSearch).length === 0 && (
+                          <div className="px-3 py-2 text-sm text-gray-400">ไม่พบ — ลองค้นหาอีกครั้ง</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <button onClick={() => up('occupation', 'other-generic')}
+                    className="w-full text-left px-3 py-2 text-xs rounded-lg bg-gray-50 border border-gray-200 hover:bg-gray-100 text-gray-600">
+                    📦 อื่นๆ — ไม่อยู่ในรายการ
+                  </button>
+                </div>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="form-label">💼 อาชีพ</label>
-                <select className="form-select" value={profile.occupation} onChange={e => up('occupation', e.target.value)}>
-                  {OCCUPATIONS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
-                </select>
-              </div>
               <div>
                 <label className="form-label">📅 อายุ</label>
                 <select className="form-select" value={profile.age} onChange={e => up('age', e.target.value)}>
@@ -234,7 +273,7 @@ export function AuLifeSim() {
               </div>
               <div>
                 <label className="form-label">💵 เงินเดือนไทย (บาท)</label>
-                <input type="number" className="form-input" placeholder="เช่น 45000"
+                <input type="number" className="form-input" placeholder="เช่น 50000"
                   value={profile.thaiSalary} onChange={e => up('thaiSalary', e.target.value)} />
               </div>
             </div>
@@ -285,7 +324,7 @@ export function AuLifeSim() {
           {/* Completed stages */}
           {simStage >= 1 && <Completed emoji="💰" title="เตรียมกระสุน" detail={isMotherLord ? 'MOTHERLORD ∞' : `${fmtThb(parseInt(savingsInput) || 0)} = ${fmtAud(initialAUD)}`} />}
           {simStage >= 2 && <Completed emoji="📋" title="ค่าก่อนบิน" detail={`-${fmtAud(preDepartureTotal)}`} negative />}
-          {simStage > 2 && choices['job'] && <Completed emoji="💼" title="ได้งาน" detail={`${fmtAud(grossAnnual)}/ปี (${choices['job'] === 'top' ? '👑 Top' : choices['job'] === 'min' ? 'ขั้นต่ำ' : 'Average'})`} />}
+          {simStage > 2 && choices['job'] && <Completed emoji="💼" title="ได้งาน" detail={`${fmtAud(grossAnnual)}/ปี (${choices['job'] === 'p90' ? '👑 Senior' : choices['job'] === 'p10' ? '📊 Entry' : choices['job'] === 'min' ? 'ขั้นต่ำ' : '💼 Median'})`} />}
           {simStage > 3 && choices['flight'] && <Completed emoji="✈️" title="ตั๋วเครื่องบิน" detail={choices['flight'] === 'company' ? 'ฟรี! บ.ออกให้' : `-${fmtAud(flightCost)}`} negative={choices['flight'] !== 'company'} />}
           {simStage > 4 && choices['temp'] && <Completed emoji="🏨" title="พักชั่วคราว" detail={choices['temp'] === 'friend' ? 'ฟรี!' : `-${fmtAud(tempCost)}`} negative={choices['temp'] !== 'friend'} />}
           {simStage > 5 && choices['housing'] && <Completed emoji="🏠" title="บ้าน" detail={`มัดจำ -${fmtAud(bond)} + ${fmtAud(monthlyRent)}/เดือน`} negative />}
@@ -327,9 +366,16 @@ export function AuLifeSim() {
                 )}
                 {simStage === 2 && (
                   <div className="space-y-2">
-                  <Opt onClick={() => pick('job', 'avg')}><div className="font-semibold">💼 {salaryData.label} — Average</div><div className="text-sm text-gray-500">{fmtAud(salaryData.mid)}/ปี ≈ {fmtThb(Math.round(salaryData.mid / 12 * AUD_TO_THB))}/เดือน</div></Opt>
-                  <Opt onClick={() => pick('job', 'top')}><div className="font-semibold">👑 Top Salary</div><div className="text-sm text-gray-500">{fmtAud(salaryData.senior)}/ปี</div></Opt>
-                  <Opt onClick={() => pick('job', 'min')}><div className="font-semibold">🏣 งาน Casual ขั้นต่ำ</div><div className="text-sm text-gray-500">{fmtAud(AU_UNSKILLED_SALARY)}/ปี ($24.95/hr)</div></Opt>
+                    {selectedOcc && (
+                      <div className="text-xs text-gray-500 mb-1 p-2 bg-gray-50 rounded-lg">
+                        💰 เงินเดือน <strong>{salaryLabel}</strong> ({salarySource})
+                        {salarySourceUrl && <> — <a href={salarySourceUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">ดูแหล่งข้อมูล</a></>}
+                      </div>
+                    )}
+                    <Opt onClick={() => pick('job', 'p10')}><div className="font-semibold">📊 Entry Level (p10)</div><div className="text-sm text-gray-500">{fmtAud(salaryP10)}/ปี ≈ {fmtThb(Math.round(salaryP10 / 12 * AUD_TO_THB))}/เดือน</div></Opt>
+                    <Opt onClick={() => pick('job', 'median')}><div className="font-semibold">💼 {salaryLabel} — Median</div><div className="text-sm text-gray-500">{fmtAud(salaryMedian)}/ปี ≈ {fmtThb(Math.round(salaryMedian / 12 * AUD_TO_THB))}/เดือน</div></Opt>
+                    <Opt onClick={() => pick('job', 'p90')}><div className="font-semibold">👑 Senior (p90)</div><div className="text-sm text-gray-500">{fmtAud(salaryP90)}/ปี ≈ {fmtThb(Math.round(salaryP90 / 12 * AUD_TO_THB))}/เดือน</div></Opt>
+                    <Opt onClick={() => pick('job', 'min')}><div className="font-semibold">🏣 ทำอะไรก็ได้ (ค่าแรงขั้นต่ำ)</div><div className="text-sm text-gray-500">{fmtAud(AU_UNSKILLED_SALARY)}/ปี ($24.95/hr × 38hr)</div></Opt>
                   </div>
                 )}
                 {simStage === 3 && (
@@ -348,9 +394,9 @@ export function AuLifeSim() {
                 )}
                 {simStage === 5 && (
                   <div className="space-y-2">
-                    <Opt onClick={() => pick('housing', 'share')}><div className="font-semibold">👥 Share House</div><div className="text-sm text-gray-500">{fmtAud(city.rentShare)}/เดือน <span className="text-gray-400">({fmtThb(Math.round(city.rentShare * AUD_TO_THB))})</span></div></Opt>
-                    <Opt onClick={() => pick('housing', '1bed')}><div className="font-semibold">🏠 1 Bed อยู่คนเดียว</div><div className="text-sm text-gray-500">{fmtAud(city.rent1br)}/เดือน <span className="text-gray-400">({fmtThb(Math.round(city.rent1br * AUD_TO_THB))})</span></div></Opt>
-                    <Opt onClick={() => pick('housing', '2bed')}><div className="font-semibold">🏡 {profile.family === 'family' ? 'บ้าน 3 ห้องนอน' : '2 Bed'}</div><div className="text-sm text-gray-500">{fmtAud(profile.family === 'family' ? city.rentFamily : city.rent2br)}/เดือน <span className="text-gray-400">({fmtThb(Math.round((profile.family === 'family' ? city.rentFamily : city.rent2br) * AUD_TO_THB))})</span></div></Opt>
+                    <Opt onClick={() => pick('housing', 'share')}><div className="font-semibold">👥 Share House</div><div className="text-sm text-gray-500">{fmtAud(city.rentShare)}/เดือน ({fmtAud(Math.round(city.rentShare * 12 / 52))}/wk) <span className="text-gray-400">{fmtThb(Math.round(city.rentShare * AUD_TO_THB))}</span></div></Opt>
+                    <Opt onClick={() => pick('housing', '1bed')}><div className="font-semibold">🏠 1 Bed อยู่คนเดียว</div><div className="text-sm text-gray-500">{fmtAud(city.rent1br)}/เดือน ({fmtAud(Math.round(city.rent1br * 12 / 52))}/wk) <span className="text-gray-400">{fmtThb(Math.round(city.rent1br * AUD_TO_THB))}</span></div></Opt>
+                    <Opt onClick={() => pick('housing', '2bed')}><div className="font-semibold">🏡 {profile.family === 'family' ? 'บ้าน 3 ห้องนอน' : '2 Bed'}</div><div className="text-sm text-gray-500">{fmtAud(profile.family === 'family' ? city.rentFamily : city.rent2br)}/เดือน ({fmtAud(Math.round((profile.family === 'family' ? city.rentFamily : city.rent2br) * 12 / 52))}/wk) <span className="text-gray-400">{fmtThb(Math.round((profile.family === 'family' ? city.rentFamily : city.rent2br) * AUD_TO_THB))}</span></div></Opt>
                   </div>
                 )}
                 {simStage === 6 && (
@@ -378,8 +424,11 @@ export function AuLifeSim() {
                 )}
                 {simStage === 9 && (
                   <div className="space-y-2">
-                    <Opt onClick={() => pick('insurance', 'medicare')}><div className="font-semibold">🏥 Medicare (ฟรี!)</div><div className="text-sm text-gray-500">PR/citizen ใช้ฟรี</div></Opt>
-                    <Opt onClick={() => pick('insurance', 'private')}><div className="font-semibold">🏥 Private Health</div><div className="text-sm text-gray-500">{fmtAud(150)}/เดือน</div></Opt>
+                    <Opt onClick={() => pick('insurance', 'medicare')}><div className="font-semibold">🏥 Medicare (ฟรี!)</div><div className="text-sm text-gray-500">PR/citizen ใช้ได้ — ครอบคลุม รพ.รัฐ + GP</div></Opt>
+                    <Opt onClick={() => pick('insurance', 'private')}><div className="font-semibold">🏥 Private Health Insurance</div><div className="text-sm text-gray-500">{fmtAud(150)}/เดือน — เลือก hospital ได้ ไม่ต้องรอคิว</div></Opt>
+                    <div className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2.5 border border-amber-200">
+                      ⚠️ วีซ่า <strong>482/494 (Employer Sponsored)</strong> บังคับทำ Private Health Insurance — เป็นเงื่อนไขวีซ่า ใช้ Medicare ไม่ได้ (ยกเว้นประเทศที่มี RHCA เช่น UK, NZ — ไทยไม่มี)
+                    </div>
                   </div>
                 )}
               </div>
@@ -425,7 +474,7 @@ export function AuLifeSim() {
           <Row label="📋 ภาษี+Medicare" val={`-${fmtAud(Math.round((auTax.tax + auTax.medicare) / 12))}`} red />
           <Row label="💵 สุทธิ (net)" val={fmtAud(monthlyNet)} green />
           <div className="border-t border-gray-200 mt-2 pt-2" />
-          <Row label="🏠 ค่าเช่า" val={`-${fmtAud(monthlyRent)}`} red />
+          <Row label="🏠 ค่าเช่า" val={`-${fmtAud(monthlyRent)} (${fmtAud(Math.round(monthlyRent * 12 / 52))}/wk)`} red />
           <Row label="🔌 ค่าน้ำไฟ+เน็ต" val={`-${fmtAud(monthlyUtils)}`} red />
           <Row label="🍳 อาหาร" val={`-${fmtAud(monthlyFood)}`} red />
           <Row label="🚗 เดินทาง" val={`-${fmtAud(monthlyTransport)}`} red />
@@ -444,6 +493,10 @@ export function AuLifeSim() {
           <h4 className="text-base font-bold text-gray-800 mb-2">🇹🇭 vs 🇦🇺 เปรียบเทียบ</h4>
           <Row label="เงินเดือนไทย (net)" val={fmtThb(thaiNetMonthly)} />
           <Row label="ค่าใช้จ่ายไทย" val={`-${fmtThb(TH_TOTAL_LIVING)}`} />
+          <div className="text-[10px] text-gray-500 ml-1 -mt-1 mb-1">
+            เช่า ฿{fmt(TH_LIVING_COSTS.rent)} + อาหาร ฿{fmt(TH_LIVING_COSTS.food)} + เดินทาง ฿{fmt(TH_LIVING_COSTS.transport)} + น้ำไฟ ฿{fmt(TH_LIVING_COSTS.utilities)} + มือถือ ฿{fmt(TH_LIVING_COSTS.phone)} + สังสรรค์ ฿{fmt(TH_LIVING_COSTS.entertainment)} + ประกัน ฿{fmt(TH_LIVING_COSTS.insurance)}
+            <div className="text-gray-400 mt-0.5">(สมมติ: คอนโดใกล้ BTS กทม., กินข้าวแกงผสม delivery, ประกัน OPD+IPD)</div>
+          </div>
           <Row label="เหลือเก็บ (ไทย)" val={fmtThb(thaiMonthlySavings)} />
           <div className="border-t border-gray-200 my-2" />
           <Row label="เหลือเก็บ (ออส)" val={fmtThb(monthlySavingsTHB)} />
@@ -469,6 +522,7 @@ export function AuLifeSim() {
             {visa.score >= 65 ? <div className="text-sm text-green-700 font-semibold mt-2">✅ ผ่าน 65! สมัคร 189/190 ได้</div>
               : visa.score >= 50 ? <div className="text-sm text-yellow-700 font-semibold mt-2">⚠️ ลอง 491 Regional (+15) = {visa.score + 15}</div>
               : <div className="text-sm text-red-700 font-semibold mt-2">❌ คะแนน Skilled ต่ำ — ดูเส้นทางอื่นที่ 📋 วีซ่า & เส้นทาง</div>}
+            <div className="text-[10px] text-gray-500 mt-2">* คำนวณเบื้องต้น (อายุ + ภาษา + ประสบการณ์ + การศึกษา) ไม่รวมคะแนนโบนัส — <a href={`${basePath}/visa`} className="text-blue-600 underline">ดูคะแนนเต็มที่หน้าวีซ่า</a></div>
           </div>
         </div>
 
@@ -481,6 +535,44 @@ export function AuLifeSim() {
             <div>• <a href="https://www.fairwork.gov.au/pay-and-wages/minimum-wages" target="_blank" rel="noopener noreferrer" className="underline">Fair Work Minimum Wage</a></div>
             <div>• <a href="https://www.seek.com.au/career-advice/role" target="_blank" rel="noopener noreferrer" className="underline">SEEK Salary Guide</a></div>
           </div>
+        </div>
+      </div>
+
+      {/* Catto Summary */}
+      <div className="card" style={{ background: 'linear-gradient(135deg, #F0FFF4, #E6FFFA)', border: '2px solid #68D391' }}>
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-2xl">🐱</span>
+          <h4 className="text-base font-bold text-gray-800">Catto สรุปให้</h4>
+        </div>
+        <div className="text-sm text-gray-700 space-y-2">
+          <p>
+            {monthlySavings >= 0
+              ? `ถ้าย้ายไป${city.name} ทำงาน${salaryLabel} เงินเดือน ${fmtAud(grossAnnual)}/ปี หักภาษี+ค่าใช้จ่ายแล้ว เหลือเก็บ ${fmtAud(monthlySavings)}/เดือน (${fmtThb(monthlySavingsTHB)})`
+              : `เตือนก่อนนะ — ตัวเลขออกมาติดลบ ${fmtAud(Math.abs(monthlySavings))}/เดือน ถ้าเลือกใช้จ่ายแบบนี้ เงินจะไม่พอ ลองลด Housing หรือ Food ดู`
+            }
+          </p>
+          {monthlySavings >= 0 && (
+            <p className="text-xs text-gray-600">
+              {monthlySavingsTHB > thaiMonthlySavings
+                ? `💪 อยู่ออส เหลือเก็บมากกว่า +${fmtThb(monthlySavingsTHB - thaiMonthlySavings)}/เดือน เทียบกับอยู่ไทย`
+                : '🤔 เหลือเก็บน้อยกว่าอยู่ไทย — แต่คุณภาพชีวิตเป็นอีกเรื่อง'
+              }
+            </p>
+          )}
+          <p className="text-xs text-gray-500">
+            💡 ค่าเริ่มต้นรวม {fmtAud(finalOneTime)} ({fmtThb(Math.round(finalOneTime * AUD_TO_THB))}) —{' '}
+            {!isMotherLord && initialAUD >= finalOneTime
+              ? 'เงินเก็บพอ ✅'
+              : !isMotherLord
+                ? `เงินเก็บยังไม่พอ ต้องหาเพิ่มอีก ${fmtAud(finalOneTime - initialAUD)}`
+                : 'MOTHERLORD 👑'
+            }
+          </p>
+          {visa.score < 65 && (
+            <p className="text-xs text-amber-700">
+              📋 คะแนน {visa.score} — ยังไม่ถึง 65 ลอง Employer Sponsored (482→186) หรือ Regional (491→191) แทน ดูรายละเอียดที่หน้าวีซ่า
+            </p>
+          )}
         </div>
       </div>
 

@@ -74,7 +74,7 @@ interface Rec {
   tips: string[]
   journey: string[]
   catId: string
-  factors?: { label: string; value: number; max: number }[] // breakdown for transparency
+  factors?: { label: string; status: 'good' | 'ok' | 'warn' | 'bad' }[]
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -133,25 +133,23 @@ function recommend(p: Profile): Rec[] {
       p.professionalYear, p.naatiCertified, p.regionalStudy)
 
     // === 482→186 Employer Sponsored ===
-    // Factors: demand level, shortage list (all lists eligible), experience, English not high bar
     {
-      const factors: { label: string; value: number; max: number }[] = []
+      const factors: { label: string; status: 'good' | 'ok' | 'warn' | 'bad' }[] = []
       let score = 40 // base: employer sponsored always available
 
-      // Occupation on any list = eligible
       if (occ) {
         const listBonus = shortage === 'mltssl_csol' ? 25 : shortage === 'csol' ? 22 : shortage === 'stsol_csol' ? 20 : shortage === 'mltssl' ? 15 : shortage === 'stsol' ? 10 : 5
-        factors.push({ label: 'Occupation List', value: listBonus, max: 25 })
+        factors.push({ label: `อยู่ใน ${shortageLabel}`, status: listBonus >= 20 ? 'good' : listBonus >= 10 ? 'ok' : 'warn' })
         score += listBonus
 
-        factors.push({ label: 'ความต้องการตลาด', value: demandScore, max: 15 })
+        factors.push({ label: `ตลาดต้องการ: ${occ.demand}`, status: demandScore >= 10 ? 'good' : demandScore >= 5 ? 'ok' : 'warn' })
         score += demandScore
 
         const expBonus = p.experience === '8+' ? 10 : p.experience === '5-7' ? 7 : p.experience === '3-4' ? 5 : 2
-        factors.push({ label: 'ประสบการณ์', value: expBonus, max: 10 })
+        factors.push({ label: `ประสบการณ์ ${p.experience} ปี`, status: expBonus >= 7 ? 'good' : expBonus >= 5 ? 'ok' : 'warn' })
         score += expBonus
       } else {
-        factors.push({ label: 'ยังไม่เลือกอาชีพ', value: 20, max: 50 })
+        factors.push({ label: 'ยังไม่เลือกอาชีพ', status: 'warn' })
         score += 20
       }
 
@@ -175,22 +173,21 @@ function recommend(p: Profile): Rec[] {
     // === 189 Skilled Independent ===
     // ONLY if occupation is on MLTSSL (MLTSSL or MLTSSL;CSOL). STSOL/CSOL-only = NOT eligible for 189
     if (!occ || isOnMLTSSL) {
-      const factors: { label: string; value: number; max: number }[] = []
+      const factors: { label: string; status: 'good' | 'ok' | 'warn' | 'bad' }[] = []
 
       if (occ) {
         const minPts = occ.minPoints
-        // Points vs actual cut-off for this occupation
         let pointsScore: number
         if (pts >= minPts + 10) pointsScore = 35
         else if (pts >= minPts) pointsScore = 25
         else if (pts >= minPts - 10) pointsScore = 15
         else pointsScore = 5
-        factors.push({ label: `คะแนน ${pts} vs cut-off ${minPts}`, value: pointsScore, max: 35 })
+        factors.push({ label: pts >= minPts ? `คะแนน ${pts} ≥ cut-off ${minPts}` : `คะแนน ${pts} < cut-off ${minPts} — ต้องเพิ่มอีก ${minPts - pts}`, status: pts >= minPts ? 'good' : pts >= minPts - 10 ? 'warn' : 'bad' })
 
         const listBonus = shortage === 'mltssl_csol' ? 25 : 20
-        factors.push({ label: `${shortageLabel}`, value: listBonus, max: 25 })
+        factors.push({ label: `อยู่ใน ${shortageLabel}`, status: listBonus >= 20 ? 'good' : 'ok' })
 
-        factors.push({ label: 'ความต้องการตลาด', value: demandScore, max: 15 })
+        factors.push({ label: `ตลาดต้องการ: ${occ.demand}`, status: demandScore >= 10 ? 'good' : demandScore >= 5 ? 'ok' : 'warn' })
 
         const total = Math.min(20 + pointsScore + listBonus + demandScore, 95)
 
@@ -227,25 +224,25 @@ function recommend(p: Profile): Rec[] {
     if (!occ || isOnMLTSSL) {
       const pts190 = pts + 5 // state nomination adds 5
       if (pts190 >= 65) {
-        const factors: { label: string; value: number; max: number }[] = []
-        let score = 20 // base
+        const factors: { label: string; status: 'good' | 'ok' | 'warn' | 'bad' }[] = []
+        let score = 20
 
         if (occ) {
-          const minPts = occ.minPoints - 5 // 190 cut-off typically 5 lower than 189
+          const minPts = occ.minPoints - 5
           const effectiveMin = Math.max(minPts, 65)
           let pointsScore: number
           if (pts190 >= effectiveMin + 10) pointsScore = 30
           else if (pts190 >= effectiveMin) pointsScore = 22
           else if (pts190 >= effectiveMin - 10) pointsScore = 12
           else pointsScore = 5
-          factors.push({ label: `คะแนน ${pts}+5 vs ~${effectiveMin}`, value: pointsScore, max: 30 })
+          factors.push({ label: pts190 >= effectiveMin ? `คะแนน ${pts}+5 = ${pts190} ≥ ~${effectiveMin}` : `คะแนน ${pts}+5 = ${pts190} < ~${effectiveMin}`, status: pts190 >= effectiveMin ? 'good' : pts190 >= effectiveMin - 10 ? 'warn' : 'bad' })
           score += pointsScore
 
           const listBonus = shortage === 'mltssl_csol' ? 20 : 15
-          factors.push({ label: shortageLabel, value: listBonus, max: 20 })
+          factors.push({ label: `อยู่ใน ${shortageLabel}`, status: listBonus >= 20 ? 'good' : 'ok' })
           score += listBonus
 
-          factors.push({ label: 'ความต้องการตลาด', value: demandScore, max: 15 })
+          factors.push({ label: `ตลาดต้องการ: ${occ.demand}`, status: demandScore >= 10 ? 'good' : demandScore >= 5 ? 'ok' : 'warn' })
           score += demandScore
         } else {
           score += (pts190 >= 85 ? 50 : pts190 >= 75 ? 35 : 20)
@@ -269,13 +266,13 @@ function recommend(p: Profile): Rec[] {
     if (!occ || isOnMLTSSL) {
       const pts491 = pts + 15
       if (pts491 >= 65 && pts < 65) {
-        const factors: { label: string; value: number; max: number }[] = []
+        const factors: { label: string; status: 'good' | 'ok' | 'warn' | 'bad' }[] = []
         let score = 25
 
         if (occ) {
-          factors.push({ label: `คะแนน ${pts}+15=${pts491}`, value: 25, max: 30 })
+          factors.push({ label: `คะแนน ${pts}+15 = ${pts491} — ผ่าน 65 ขั้นต่ำ`, status: 'good' })
           const listBonus = shortage === 'mltssl_csol' ? 20 : 15
-          factors.push({ label: shortageLabel, value: listBonus, max: 20 })
+          factors.push({ label: `อยู่ใน ${shortageLabel}`, status: listBonus >= 20 ? 'good' : 'ok' })
           score += 25 + listBonus + Math.min(demandScore, 10)
         } else {
           score += 35
@@ -390,9 +387,9 @@ function recommend(p: Profile): Rec[] {
       journey: ['เตรียมเอกสาร', `ยื่น ${vn.split('/')[0]}`, 'รอ 12-24 เดือน', onshore ? 'Bridging → ทำงาน' : 'ย้ายไป AU', `🏠 ${vn.split('/')[1]} PR!`],
       catId: 'partner',
       factors: [
-        { label: 'ความสัมพันธ์', value: p.partnerType === 'married' ? 30 : 22, max: 30 },
-        { label: 'ไม่ต้อง skill/points', value: 30, max: 30 },
-        { label: onshore ? 'Onshore (bridging visa)' : 'Offshore', value: onshore ? 20 : 15, max: 20 },
+        { label: p.partnerType === 'married' ? 'แต่งงาน — หลักฐานชัด' : 'De facto — เตรียมเอกสารให้ดี', status: p.partnerType === 'married' ? 'good' as const : 'ok' as const },
+        { label: 'ไม่ต้องมี skill/points/English', status: 'good' as const },
+        { label: onshore ? 'อยู่ AU แล้ว — ได้ bridging visa' : 'สมัครจากต่างประเทศ', status: onshore ? 'good' as const : 'ok' as const },
       ],
     })
   }
@@ -1228,19 +1225,14 @@ export function VisaExplorer() {
                     ))}
                   </div>
 
-                  {/* Factor Breakdown (data transparency) */}
+                  {/* Factor Checklist */}
                   {rec.factors && rec.factors.length > 0 && (
                     <div className={`rounded-lg p-2.5 mb-3 ${i === 0 ? 'bg-white/60 border border-blue-100' : 'bg-gray-50 border border-gray-100'}`}>
-                      <div className="text-[9px] font-bold text-gray-400 mb-1.5 uppercase tracking-wider">📊 คะแนนจากข้อมูลจริง</div>
+                      <div className="text-[9px] font-bold text-gray-400 mb-1.5 uppercase tracking-wider">📋 ปัจจัยที่พิจารณา</div>
                       {rec.factors.map((f, fi) => (
-                        <div key={fi} className="flex items-center gap-2 mb-1 last:mb-0">
-                          <span className="text-[10px] text-gray-500 w-32 shrink-0 truncate">{f.label}</span>
-                          <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                            <div className={`h-full rounded-full transition-all duration-700 ${
-                              f.value / f.max >= 0.7 ? 'bg-green-400' : f.value / f.max >= 0.4 ? 'bg-blue-400' : 'bg-gray-300'
-                            }`} style={{ width: `${Math.min((f.value / f.max) * 100, 100)}%` }} />
-                          </div>
-                          <span className="text-[10px] text-gray-500 w-8 text-right">{f.value}/{f.max}</span>
+                        <div key={fi} className="flex items-center gap-1.5 mb-1 last:mb-0">
+                          <span className="text-sm shrink-0">{f.status === 'good' ? '✅' : f.status === 'ok' ? '🟡' : f.status === 'warn' ? '⚠️' : '❌'}</span>
+                          <span className={`text-[10px] ${f.status === 'good' ? 'text-green-700' : f.status === 'ok' ? 'text-yellow-700' : f.status === 'warn' ? 'text-orange-600' : 'text-red-600'}`}>{f.label}</span>
                         </div>
                       ))}
                     </div>

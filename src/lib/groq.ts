@@ -169,7 +169,7 @@ export async function rankCountriesWithAI(
   },
   countries: Array<{
     id: string; name: string; nameTH: string; flag: string
-    avgSalaryUSD: number; costIndex: number
+    avgSalaryUSD: number; costIndex: number; currency: string
     hotJobs: string[]; visaPaths: string[]
     pros: string[]; cons: string[]
     thaiCommunity: string
@@ -192,13 +192,29 @@ export async function rankCountriesWithAI(
   }
   const userGoals = userProfile.goals.map(g => goalLabels[g] || g).join(', ')
 
-  const countrySummaries = countries.map(c =>
-    `${c.flag} ${c.id}: salary $${(c.avgSalaryUSD / 1000).toFixed(0)}K/yr, cost ${c.costIndex}% of TH, ` +
-    `hotJobs: ${c.hotJobs.join('/')}, visa: ${c.visaPaths.slice(0, 2).join(', ')}, ` +
-    `safety:${c.scores.safety} healthcare:${c.scores.healthcare} edu:${c.scores.education} ` +
-    `wlb:${c.scores.workLifeBalance} immigration:${c.scores.immigrationEase} ` +
-    `jobMkt:${c.scores.jobMarket} climate:${c.scores.climate} thaiComm:${c.thaiCommunity}`
-  ).join('\n')
+  const CURRENCY_SYMBOLS: Record<string, string> = {
+    AUD: 'A$', NZD: 'NZ$', CAD: 'C$', USD: 'US$', GBP: '£',
+    EUR: '€', JPY: '¥', SGD: 'S$', CHF: 'CHF', AED: 'AED',
+    NOK: 'NOK', SEK: 'SEK', KRW: '₩',
+  }
+  const CURRENCY_TO_THB: Record<string, number> = {
+    AUD: 22.10, NZD: 20.00, CAD: 24.50, USD: 34.50, GBP: 43.50,
+    EUR: 37.50, JPY: 0.23, SGD: 25.80, CHF: 39.50, AED: 9.40,
+    NOK: 3.25, SEK: 3.30, KRW: 0.025,
+  }
+
+  const countrySummaries = countries.map(c => {
+    const sym = CURRENCY_SYMBOLS[c.currency] || c.currency
+    const thbRate = CURRENCY_TO_THB[c.currency] || 1
+    const localSalary = Math.round(c.avgSalaryUSD * 34.5 / thbRate) // USD→local via THB
+    const thbMonthly = Math.round(localSalary * thbRate / 12)
+    return `${c.flag} ${c.id}: salary ${sym}${(localSalary / 1000).toFixed(0)}K/ปี (~${(thbMonthly / 1000).toFixed(0)}K บาท/เดือน), ` +
+      `cost ${c.costIndex}% of TH, currency: ${c.currency}, ` +
+      `hotJobs: ${c.hotJobs.join('/')}, visa: ${c.visaPaths.slice(0, 2).join(', ')}, ` +
+      `safety:${c.scores.safety} healthcare:${c.scores.healthcare} edu:${c.scores.education} ` +
+      `wlb:${c.scores.workLifeBalance} immigration:${c.scores.immigrationEase} ` +
+      `jobMkt:${c.scores.jobMarket} climate:${c.scores.climate} thaiComm:${c.thaiCommunity}`
+  }).join('\n')
 
   const messages: ChatMessage[] = [
     {
@@ -215,8 +231,13 @@ export async function rankCountriesWithAI(
 ให้คะแนน matchPct (15-97) ตามความเหมาะสมจริงๆ ห้ามให้สูงทุกประเทศ
 เลือก Top 5 เท่านั้น
 
+สำคัญ: ใน highlights ให้แสดงเงินเดือนเป็นสกุลเงินท้องถิ่นของประเทศนั้น/ปี พร้อมเทียบเป็นบาท/เดือน
+เช่น "💰 เงินเดือน A$95K/ปี (~175K บาท/เดือน)" สำหรับออสเตรเลีย
+เช่น "💰 เงินเดือน €55K/ปี (~172K บาท/เดือน)" สำหรับเยอรมนี
+ห้ามใช้ $ เฉยๆ ต้องระบุสกุลเงินชัด (A$, C$, US$, €, £, ¥, S$, CHF, AED, NOK, SEK, ₩)
+
 ตอบ JSON เท่านั้น ห้ามเขียนอธิบายก่อน/หลัง:
-{"rankings":[{"countryId":"...", "matchPct":85, "reason":"เหตุผลสั้น 1-2 ประโยค", "highlights":["✅ จุดเด่น 1","✅ จุดเด่น 2","🔥 อาชีพ demand"], "challenges":["⚠️ ข้อควรรู้ 1","⚠️ ข้อควรรู้ 2"]}]}`,
+{"rankings":[{"countryId":"...", "matchPct":85, "reason":"เหตุผลสั้น 1-2 ประโยค", "highlights":["💰 เงินเดือน X/ปี (~Yบาท/เดือน)","✅ จุดเด่น","🔥 อาชีพ demand"], "challenges":["⚠️ ข้อควรรู้ 1","⚠️ ข้อควรรู้ 2"]}]}`,
     },
     {
       role: 'user',

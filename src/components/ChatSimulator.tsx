@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import {
   COUNTRIES, GOALS, OCCUPATIONS,
+  CURRENCY_TO_THB, CURRENCY_SYMBOLS,
   matchCountries,
   type MatchResult, type MatchParams,
 } from '@/data/country-data'
@@ -1012,6 +1013,22 @@ export function ChatSimulator() {
                     ))}
                   </div>
 
+                  {/* Salary summary (always visible) */}
+                  {(() => {
+                    const userOcc = aiMode ? aiGathered.occupation : occupation
+                    const salary = getOccSalary(result.country.id, userOcc)
+                    const cur = result.country.currency || 'USD'
+                    const sym = CURRENCY_SYMBOLS[cur] || cur
+                    const thbRate = CURRENCY_TO_THB[cur] || 1
+                    if (salary) {
+                      const thbMonthly = Math.round(salary.mid * thbRate / 12)
+                      return <div className="text-xs px-4 pb-1 text-gray-500">💰 {sym}{salary.mid.toLocaleString()}/ปี (~{thbMonthly.toLocaleString()} บาท/เดือน)</div>
+                    }
+                    const localSalary = Math.round(result.country.avgSalaryUSD * 34.5 / thbRate)
+                    const thbMonthly = Math.round(localSalary * thbRate / 12)
+                    return <div className="text-xs px-4 pb-1 text-gray-500">💰 ~{sym}{localSalary.toLocaleString()}/ปี (~{thbMonthly.toLocaleString()} บาท/เดือน)</div>
+                  })()}
+
                   {/* Occupation note */}
                   {result.occupationNote && (
                     <div className="text-xs px-4 pb-2 text-blue-700 font-medium">{result.occupationNote}</div>
@@ -1059,16 +1076,23 @@ export function ChatSimulator() {
                         const userOcc = aiMode ? aiGathered.occupation : occupation
                         const salary = getOccSalary(result.country.id, userOcc)
                         const occLabel = OCCUPATIONS.find(o => o.id === userOcc)?.labelTH || userOcc
+                        const cur = result.country.currency || 'USD'
+                        const sym = CURRENCY_SYMBOLS[cur] || cur
+                        const thbRate = CURRENCY_TO_THB[cur] || 1
                         if (salary) {
+                          const midMonthlyTHB = Math.round(salary.mid * thbRate / 12)
                           return (
                             <div className="text-xs mt-2 space-y-1">
-                              <div className="text-blue-600 font-medium">💼 เงินเดือน {occLabel} ({salary.currency}/ปี):</div>
-                              <div className="text-gray-600">🟢 Entry: {salary.entry.toLocaleString()} → Mid: {salary.mid.toLocaleString()} → Senior: {salary.senior.toLocaleString()}</div>
+                              <div className="text-blue-600 font-medium">💼 เงินเดือน {occLabel} ({sym}/ปี):</div>
+                              <div className="text-gray-600">🟢 Entry: {sym}{salary.entry.toLocaleString()} → Mid: {sym}{salary.mid.toLocaleString()} → Senior: {sym}{salary.senior.toLocaleString()}</div>
+                              <div className="text-gray-500">≈ Mid ~{midMonthlyTHB.toLocaleString()} บาท/เดือน</div>
                               <div className="text-gray-400">ค่าครองชีพ {result.country.costIndex}% ของไทย | คนไทย: {result.country.thaiCommunity === 'large' ? 'เยอะ' : result.country.thaiCommunity === 'medium' ? 'พอมี' : 'น้อย'}</div>
                             </div>
                           )
                         }
-                        return <div className="text-xs text-gray-400 mt-2">💰 เงินเดือนเฉลี่ย ~${result.country.avgSalaryUSD.toLocaleString()}/ปี | ค่าครองชีพ {result.country.costIndex}% ของไทย | คนไทย: {result.country.thaiCommunity === 'large' ? 'เยอะ' : result.country.thaiCommunity === 'medium' ? 'พอมี' : 'น้อย'}</div>
+                        const localSalary = Math.round(result.country.avgSalaryUSD * 34.5 / thbRate)
+                        const thbMonthly = Math.round(localSalary * thbRate / 12)
+                        return <div className="text-xs text-gray-400 mt-2">💰 เงินเดือนเฉลี่ย ~{sym}{localSalary.toLocaleString()}/ปี (~{thbMonthly.toLocaleString()} บาท/เดือน) | ค่าครองชีพ {result.country.costIndex}% ของไทย | คนไทย: {result.country.thaiCommunity === 'large' ? 'เยอะ' : result.country.thaiCommunity === 'medium' ? 'พอมี' : 'น้อย'}</div>
                       })()}
                     </div>
                   )}

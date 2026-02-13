@@ -156,32 +156,67 @@ export function JobSearch({ value, specialization, onSelect }: JobSearchProps) {
           <div className="flex justify-between items-start mb-3">
             <div>
               <h4 className="font-bold text-blue-900 text-lg">{selectedOcc.title}</h4>
-              <span className="text-xs text-blue-600">{selectedOcc.category}</span>
+              <span className="text-xs text-blue-600">ANZSCO {selectedOcc.anzsco} · {selectedOcc.category}</span>
             </div>
             <span className={`text-sm font-bold ${getDemandColor(selectedOcc.demand)}`}>
               ⚡ ดีมานด์: {selectedOcc.demand}
             </span>
           </div>
 
+          {/* Salary breakdown bar chart */}
+          <div className="mb-3 bg-white/60 rounded-lg p-3 border border-blue-100">
+            <div className="text-xs font-semibold text-gray-500 mb-2">💰 เงินเดือน (AUD/ปี)</div>
+            {(() => {
+              const { p10, median, p90 } = selectedOcc.salaryRange
+              const max = p90 * 1.05
+              return (
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-gray-400 w-[65px] shrink-0">เริ่มต้น (p10)</span>
+                    <div className="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
+                      <div className="bg-blue-300 h-full rounded-full" style={{ width: `${(p10 / max) * 100}%` }} />
+                    </div>
+                    <span className="text-xs font-bold text-gray-600 w-[65px] text-right">${p10.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-gray-500 w-[65px] shrink-0 font-semibold">ค่ากลาง</span>
+                    <div className="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
+                      <div className="bg-blue-500 h-full rounded-full" style={{ width: `${(median / max) * 100}%` }} />
+                    </div>
+                    <span className="text-sm font-extrabold text-blue-700 w-[65px] text-right">${median.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-gray-400 w-[65px] shrink-0">สูง (p90)</span>
+                    <div className="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
+                      <div className="bg-blue-700 h-full rounded-full" style={{ width: `${(p90 / max) * 100}%` }} />
+                    </div>
+                    <span className="text-xs font-bold text-gray-600 w-[65px] text-right">${p90.toLocaleString()}</span>
+                  </div>
+                </div>
+              )
+            })()}
+            <div className="text-[9px] text-gray-400 mt-2">
+              📊 ที่มา:{' '}
+              <a href={selectedOcc.salarySourceUrl} target="_blank" rel="noopener noreferrer"
+                className="text-blue-500 underline hover:text-blue-700">{selectedOcc.salarySource}</a>
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div>
-              <span className="text-gray-500">💰 เงินเดือน (AUD/ปี)</span>
+              <span className="text-gray-500">🎯 คะแนนขั้นต่ำ (SkillSelect)</span>
               <p className="font-semibold text-gray-800">
-                ${selectedOcc.salaryRange.p10.toLocaleString()} – $
-                {selectedOcc.salaryRange.p90.toLocaleString()}
+                {selectedOcc.minPoints} คะแนน
+                {selectedOcc.minPoints491 ? ` (491: ${selectedOcc.minPoints491})` : ''}
               </p>
-            </div>
-            <div>
-              <span className="text-gray-500">📋 คะแนนขั้นต่ำ</span>
-              <p className="font-semibold text-gray-800">{selectedOcc.minPoints} คะแนน</p>
-            </div>
-            <div>
-              <span className="text-gray-500">🏠 เส้นทาง PR</span>
-              <p className="font-semibold text-gray-800">{selectedOcc.pathToPR}</p>
             </div>
             <div>
               <span className="text-gray-500">📌 Shortage List</span>
               <p className="font-semibold text-gray-800">{selectedOcc.shortageList}</p>
+            </div>
+            <div className="col-span-2">
+              <span className="text-gray-500">🏠 เส้นทาง PR</span>
+              <p className="font-semibold text-gray-800">{selectedOcc.pathToPR}</p>
             </div>
           </div>
 
@@ -197,7 +232,10 @@ export function JobSearch({ value, specialization, onSelect }: JobSearchProps) {
           </div>
 
           <div className="mt-2 text-xs text-gray-400">
-            📊 {selectedOcc.salarySource} | 📋 {selectedOcc.pointsNote}
+            � {selectedOcc.pointsNote} ·{' '}
+            <a href="https://immi.homeaffairs.gov.au/visas/working-in-australia/skillselect" target="_blank" rel="noopener noreferrer"
+              className="text-blue-400 underline hover:text-blue-600">SkillSelect</a>
+            {' '}· Demand: {selectedOcc.demandSource}
           </div>
         </div>
       )}

@@ -277,23 +277,62 @@ export function SummaryStep({
             <div className="flex justify-between items-start mb-3">
               <div>
                 <p className="font-bold text-gray-800">{selectedOcc.title}</p>
-                <p className="text-xs text-gray-500">{selectedOcc.category}</p>
+                <p className="text-xs text-gray-500">{selectedOcc.category} · ANZSCO {selectedOcc.anzsco}</p>
               </div>
               <span className="text-sm font-bold text-green-600">
                 ⚡ {selectedOcc.demand}
               </span>
             </div>
+
+            {/* Salary bar chart */}
+            <div className="bg-white/60 rounded-lg p-2.5 border border-gray-100 mb-2">
+              <div className="text-xs font-semibold text-gray-500 mb-1.5">💰 เงินเดือน (AUD/ปี)</div>
+              {(() => {
+                const { p10, median, p90 } = selectedOcc.salaryRange
+                const max = p90 * 1.05
+                return (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[9px] text-gray-400 w-[50px] shrink-0">เริ่มต้น</span>
+                      <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
+                        <div className="bg-blue-300 h-full rounded-full" style={{ width: `${(p10 / max) * 100}%` }} />
+                      </div>
+                      <span className="text-[10px] font-bold text-gray-600 w-[50px] text-right">{fmt(p10)}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[9px] text-gray-500 w-[50px] shrink-0 font-semibold">ค่ากลาง</span>
+                      <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
+                        <div className="bg-blue-500 h-full rounded-full" style={{ width: `${(median / max) * 100}%` }} />
+                      </div>
+                      <span className="text-[10px] font-extrabold text-blue-700 w-[50px] text-right">{fmt(median)}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[9px] text-gray-400 w-[50px] shrink-0">สูง</span>
+                      <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
+                        <div className="bg-blue-700 h-full rounded-full" style={{ width: `${(p90 / max) * 100}%` }} />
+                      </div>
+                      <span className="text-[10px] font-bold text-gray-600 w-[50px] text-right">{fmt(p90)}</span>
+                    </div>
+                  </div>
+                )
+              })()}
+              <div className="text-[8px] text-gray-400 mt-1">
+                ที่มา:{' '}
+                <a href={selectedOcc.salarySourceUrl} target="_blank" rel="noopener noreferrer"
+                  className="text-blue-500 underline">{selectedOcc.salarySource}</a>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-2 text-sm">
               <div>
-                <p className="text-xs text-gray-500">💰 เงินเดือน AUD/ปี</p>
-                <p className="font-semibold">
-                  {fmt(selectedOcc.salaryRange.p10)} –{' '}
-                  {fmt(selectedOcc.salaryRange.p90)}
+                <p className="text-xs text-gray-500">🎯 คะแนนขั้นต่ำ (SkillSelect)</p>
+                <p className="font-semibold">{selectedOcc.minPoints} pts
+                  {selectedOcc.minPoints491 ? ` / 491: ${selectedOcc.minPoints491}` : ''}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-gray-500">📋 คะแนนขั้นต่ำ</p>
-                <p className="font-semibold">{selectedOcc.minPoints} pts</p>
+                <p className="text-xs text-gray-500">📌 Shortage List</p>
+                <p className="font-semibold">{selectedOcc.shortageList}</p>
               </div>
               <div className="col-span-2">
                 <p className="text-xs text-gray-500">🏠 เส้นทาง PR</p>

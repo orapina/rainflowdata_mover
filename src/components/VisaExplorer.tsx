@@ -157,11 +157,11 @@ function recommend(p: Profile): Rec[] {
 
       score = Math.min(score, 95)
       const occTips = occ ? [
-        `อาชีพ "${occ.title}" อยู่ใน ${shortageLabel}`,
+        `อาชีพ "${occ.title}" (ANZSCO ${occ.anzsco}) อยู่ใน ${shortageLabel}`,
         occ.demand === 'สูงมาก' || occ.demand === 'สูง'
-          ? `ตลาดต้องการ ${occ.demand} — หา sponsor ง่ายกว่าปกติ`
-          : `ตลาดต้องการ ${occ.demand} — ต้องเตรียมตัวหา sponsor ดีๆ`,
-        `เงินเดือน $${occ.salaryRange.p10.toLocaleString()} - $${occ.salaryRange.p90.toLocaleString()} AUD/ปี (10th-90th percentile)`,
+          ? `ตลาดต้องการ ${occ.demand} — ${occ.demandSource}`
+          : `ตลาดต้องการ ${occ.demand} — ${occ.demandSource}`,
+        `เงินเดือน: เริ่มต้น $${occ.salaryRange.p10.toLocaleString()} → ค่ากลาง $${occ.salaryRange.median.toLocaleString()} → มีประสบการณ์ $${occ.salaryRange.p90.toLocaleString()} (${occ.salarySource})`,
       ] : ['เลือกอาชีพเพื่อดูข้อมูลเจาะลึก']
 
       r.push({
@@ -710,10 +710,13 @@ export function VisaExplorer() {
       <div className="text-xs font-semibold text-gray-500 mb-2">{label}</div>
       {selectedOcc ? (
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-xl p-3 animate-fade-in">
-          <div className="flex items-center justify-between">
+          {/* Header row */}
+          <div className="flex items-start justify-between">
             <div>
               <div className="text-sm font-bold text-gray-800">{selectedOcc.title}</div>
-              <div className="text-xs text-gray-500 mt-0.5">{selectedOcc.category}</div>
+              <div className="text-[10px] text-gray-400 mt-0.5">
+                ANZSCO {selectedOcc.anzsco} · {selectedOcc.category}
+              </div>
               <div className="flex flex-wrap gap-1.5 mt-2">
                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
                   getShortageLevel(selectedOcc.shortageList) === 'mltssl_csol' ? 'bg-green-100 text-green-700 border border-green-300' :
@@ -726,16 +729,62 @@ export function VisaExplorer() {
                   selectedOcc.demand === 'ปานกลาง' ? 'bg-yellow-100 text-yellow-700' :
                   'bg-gray-100 text-gray-600'
                 }`}>ต้องการ: {selectedOcc.demand}</span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
-                  cut-off: {selectedOcc.minPoints} คะแนน
-                </span>
-              </div>
-              <div className="text-[10px] text-gray-400 mt-1.5">
-                💰 ${selectedOcc.salaryRange.p10.toLocaleString()} - ${selectedOcc.salaryRange.p90.toLocaleString()} AUD/ปี
               </div>
             </div>
             <button onClick={() => { setProfile(p => ({ ...p, occupationKey: '' })); setOccSearch(''); setShowOccPicker(true) }}
               className="text-xs text-blue-600 underline shrink-0 ml-2 hover:text-blue-800">เปลี่ยน</button>
+          </div>
+
+          {/* Salary breakdown — PayScale style */}
+          <div className="mt-3 bg-white/70 rounded-lg p-2.5 border border-blue-200/50">
+            <div className="text-[10px] font-semibold text-gray-500 mb-2">💰 เงินเดือน (AUD/ปี)</div>
+            {(() => {
+              const { p10, median, p90 } = selectedOcc.salaryRange
+              const max = p90 * 1.05
+              return (
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] text-gray-400 w-[52px] shrink-0">เริ่มต้น</span>
+                    <div className="flex-1 bg-gray-100 rounded-full h-3.5 overflow-hidden">
+                      <div className="bg-blue-300 h-full rounded-full transition-all" style={{ width: `${(p10 / max) * 100}%` }} />
+                    </div>
+                    <span className="text-[10px] font-bold text-gray-600 w-[55px] text-right">${p10.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] text-gray-500 w-[52px] shrink-0 font-semibold">ค่ากลาง</span>
+                    <div className="flex-1 bg-gray-100 rounded-full h-3.5 overflow-hidden">
+                      <div className="bg-blue-500 h-full rounded-full transition-all" style={{ width: `${(median / max) * 100}%` }} />
+                    </div>
+                    <span className="text-[10px] font-extrabold text-blue-700 w-[55px] text-right">${median.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] text-gray-400 w-[52px] shrink-0">มีประสบการณ์</span>
+                    <div className="flex-1 bg-gray-100 rounded-full h-3.5 overflow-hidden">
+                      <div className="bg-blue-700 h-full rounded-full transition-all" style={{ width: `${(p90 / max) * 100}%` }} />
+                    </div>
+                    <span className="text-[10px] font-bold text-gray-600 w-[55px] text-right">${p90.toLocaleString()}</span>
+                  </div>
+                </div>
+              )
+            })()}
+            <div className="text-[8px] text-gray-400 mt-1.5 flex items-center gap-1">
+              📊 ที่มา:{' '}
+              <a href={selectedOcc.salarySourceUrl} target="_blank" rel="noopener noreferrer"
+                className="text-blue-500 underline hover:text-blue-700">{selectedOcc.salarySource}</a>
+            </div>
+          </div>
+
+          {/* Points cut-off */}
+          <div className="mt-2 flex items-center gap-2">
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-bold">
+              🎯 SkillSelect cut-off: {selectedOcc.minPoints} คะแนน
+              {selectedOcc.minPoints491 ? ` (491: ${selectedOcc.minPoints491})` : ''}
+            </span>
+          </div>
+          <div className="text-[8px] text-gray-400 mt-0.5">
+            📋 ที่มา: SkillSelect Invitation Round 13 Nov 2025 ·{' '}
+            <a href="https://immi.homeaffairs.gov.au/visas/working-in-australia/skillselect" target="_blank" rel="noopener noreferrer"
+              className="text-blue-500 underline hover:text-blue-700">immi.homeaffairs.gov.au</a>
           </div>
         </div>
       ) : (
@@ -843,7 +892,7 @@ export function VisaExplorer() {
       {/* Source note */}
       {selectedOcc && (
         <div className="text-[9px] text-gray-400 mt-1">
-          📊 {selectedOcc.pointsNote}
+          📊 {selectedOcc.pointsNote} · ที่มา demand: {selectedOcc.demandSource}
         </div>
       )}
     </div>

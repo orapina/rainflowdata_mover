@@ -316,10 +316,14 @@ export function ChatSimulator() {
 
   // Quick occupation chip mapping → proper AI-expected IDs
   const OCC_CHIP_MAP: { label: string; text: string; occId: string }[] = [
-    { label: '💻 IT', text: 'IT / โปรแกรมเมอร์', occId: 'software' },
+    { label: '💻 Software Dev', text: 'Software Developer / โปรแกรมเมอร์', occId: 'software' },
+    { label: '📊 Data / Analytics', text: 'Data Engineer / Analyst', occId: 'software' },
+    { label: '☁️ DevOps / Cloud', text: 'DevOps / Cloud Engineer', occId: 'software' },
+    { label: '🤖 AI / ML', text: 'AI / Machine Learning Engineer', occId: 'software' },
+    { label: '🔒 Cybersecurity', text: 'Cybersecurity Analyst', occId: 'software' },
     { label: '⚙️ วิศวกร', text: 'วิศวกร', occId: 'engineering' },
-    { label: '📊 บัญชี', text: 'บัญชี / การเงิน', occId: 'accounting' },
     { label: '🏥 สาธารณสุข', text: 'แพทย์ / พยาบาล', occId: 'healthcare' },
+    { label: '📋 บัญชี', text: 'บัญชี / การเงิน', occId: 'accounting' },
     { label: '👨‍🍳 เชฟ', text: 'เชฟ / ครัว', occId: 'chef' },
   ]
   const sendOccChip = (text: string, occId: string) => {
@@ -337,6 +341,10 @@ export function ChatSimulator() {
     // Off-topic rejection → no chips
     if (txt.includes('catto ช่วยไม่ได้')) return 'none'
 
+    // Don't show chips until user has sent at least 1 message — let them type freely first
+    const userMsgCount = aiMessages.filter(m => m.role === 'user').length
+    if (userMsgCount < 1) return 'none'
+
     // Detect what the AI is asking about from its message
     const asksIncome = /รายได้|เงินเดือน|เดือนละ|ได้เท่าไร|salary|income/.test(txt)
     const asksAge = /อายุ|เกิดปี|กี่ปี|age/.test(txt)
@@ -350,10 +358,7 @@ export function ChatSimulator() {
     if (asksOcc && !aiGathered.occupation) return 'occ-search'
 
     // Fallback: follow gathered-state order for what's missing
-    if (aiGathered.goals.length === 0) {
-      const userMsgCount = aiMessages.filter(m => m.role === 'user').length
-      return userMsgCount >= 1 ? 'goals' : 'none'
-    }
+    if (aiGathered.goals.length === 0) return 'goals'
     if (!goalsConfirmed) return 'goals-confirm'
     if (!aiGathered.occupation) return 'occ-search'
     if (!aiGathered.age) return 'age'

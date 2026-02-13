@@ -3,7 +3,7 @@ import Script from 'next/script'
 import './globals.css'
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ''
-const gaId = process.env.NEXT_PUBLIC_GA_ID || ''
+const gaId = process.env.NEXT_PUBLIC_GA_ID || 'G-H2FX3V1CK6'
 
 export const metadata: Metadata = {
   title: '🌏 Life After Migration - จำลองชีวิตหลังย้ายประเทศ',

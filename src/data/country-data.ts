@@ -420,7 +420,6 @@ export function matchCountries(params: MatchParams): MatchResult[] {
 function generateHighlights(country: Country, params: MatchParams): string[] {
   const highlights: string[] = []
 
-  // Add highlights based on high-scoring criteria that match user priorities
   const criteriaLabels: Record<string, string> = {
     costOfLiving: 'ค่าครองชีพ',
     safety: 'ความปลอดภัย',
@@ -434,21 +433,49 @@ function generateHighlights(country: Country, params: MatchParams): string[] {
     politicalStability: 'การเมืองมั่นคง',
   }
 
-  // Sort country scores by value, pick top ones that match priorities
-  const scoredCriteria = Object.entries(country.scores)
-    .map(([key, val]) => ({ key: key as keyof CountryScores, val }))
-    .sort((a, b) => b.val - a.val)
-
-  for (const { key, val } of scoredCriteria) {
-    if (val >= 8 && highlights.length < 3) {
-      const label = criteriaLabels[key]
-      if (val === 10) highlights.push(`⭐ ${label} ดีเลิศ`)
-      else if (val === 9) highlights.push(`✅ ${label} ดีมาก`)
-      else highlights.push(`✅ ${label} ดี`)
+  // Build set of criteria user cares about (from their goals)
+  const userPriorities = new Set<string>()
+  for (const g of params.goals) {
+    const mapping = GOAL_WEIGHTS[g]
+    if (mapping) {
+      for (const criterion of Object.keys(mapping)) {
+        userPriorities.add(criterion)
+      }
     }
   }
 
-  // Add occupation note if it's a hot job (ใช้ matchIds)
+  // 1st pass: highlight criteria USER chose that this country scores well on (>=7)
+  const priorityCriteria = Object.entries(country.scores)
+    .filter(([key]) => userPriorities.has(key))
+    .map(([key, val]) => ({ key: key as keyof CountryScores, val }))
+    .sort((a, b) => b.val - a.val)
+
+  for (const { key, val } of priorityCriteria) {
+    if (val >= 7 && highlights.length < 2) {
+      const label = criteriaLabels[key]
+      if (val === 10) highlights.push(`⭐ ${label} ดีเลิศ`)
+      else if (val >= 9) highlights.push(`✅ ${label} ดีมาก`)
+      else if (val >= 8) highlights.push(`✅ ${label} ดี`)
+      else highlights.push(`👍 ${label} พอใช้ได้`)
+    }
+  }
+
+  // 2nd pass: fill remaining spots with highest scores (not already added)
+  const addedKeys = new Set(priorityCriteria.filter(c => c.val >= 7).slice(0, 2).map(c => c.key))
+  const otherCriteria = Object.entries(country.scores)
+    .filter(([key]) => !addedKeys.has(key as keyof CountryScores))
+    .map(([key, val]) => ({ key: key as keyof CountryScores, val }))
+    .sort((a, b) => b.val - a.val)
+
+  for (const { key, val } of otherCriteria) {
+    if (val >= 9 && highlights.length < 3) {
+      const label = criteriaLabels[key]
+      if (val === 10) highlights.push(`⭐ ${label} ดีเลิศ`)
+      else highlights.push(`✅ ${label} ดีมาก`)
+    }
+  }
+
+  // Add occupation note if it's a hot job
   const occDef = OCCUPATIONS.find(o => o.id === params.occupation)
   const isHotJob = occDef
     ? occDef.matchIds.some(mid => country.hotJobs.includes(mid))

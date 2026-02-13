@@ -13,6 +13,7 @@ import {
   calculateSimpleVisaScore,
 } from '@/data/simulator-data'
 import { searchOccupations } from '@/data/occupations'
+import { getCountryDetails, type OccupationSalaries, type SalaryRange } from '@/data/country-detailed-data'
 import {
   chatWithGroq, analyzeResults, rankCountriesWithAI,
   getStoredApiKey,
@@ -43,6 +44,23 @@ interface AuProfile {
 const fmt = (n: number) => Math.round(n).toLocaleString()
 const fmtAud = (n: number) => `$${fmt(n)}`
 const fmtThb = (n: number) => `฿${fmt(n)}`
+
+// Map user occupation ID → key in OccupationSalaries
+const OCC_TO_SALARY_KEY: Record<string, keyof OccupationSalaries> = {
+  'software': 'softwareDev',
+  'engineering': 'engineer',
+  'accounting': 'accountant',
+  'healthcare': 'nurse',
+  'chef': 'trades', // chef uses trades salary range as closest proxy
+  'other': 'trades',
+}
+
+function getOccSalary(countryId: string, occId: string): SalaryRange | null {
+  const details = getCountryDetails(countryId)
+  if (!details) return null
+  const key = OCC_TO_SALARY_KEY[occId] || 'softwareDev'
+  return details.salaries[key] || null
+}
 
 const STAGE_META = [
   { id: 'savings', title: '💰 ด่าน 1: เตรียมกระสุน', sub: 'มีเงินเก็บเท่าไหร่?' },
@@ -278,9 +296,9 @@ export function ChatSimulator() {
     if (aiLoading || aiGathered.ready || aiMessages.length < 1) return 'none'
     // Goals phase: let user type freely first, then show confirm chips
     if (aiGathered.goals.length === 0) {
-      // After 2+ user messages without goals, show chips as fallback
+      // After 1+ user message without goals detected, show chips as fallback
       const userMsgCount = aiMessages.filter(m => m.role === 'user').length
-      return userMsgCount >= 2 ? 'goals' : 'none'
+      return userMsgCount >= 1 ? 'goals' : 'none'
     }
     // Goals detected but not confirmed: show remaining goals + "ไปต่อ"
     if (!goalsConfirmed) return 'goals-confirm'
@@ -489,7 +507,7 @@ export function ChatSimulator() {
           {/* ===== GOALS: multi-select chips (fallback if AI didn't detect) ===== */}
           {chipMode === 'goals' && (
             <div className="quick-replies animate-fade-in">
-              <div className="chip-hint">กดเลือก 1-3 ข้อ แล้วกดส่ง ✨ หรือพิมพ์เอง</div>
+              <div className="chip-hint">AI เข้าใจแล้ว! กดเลือกเพิ่มได้ถ้าต้องการ 1-3 ข้อ ✨</div>
               <div className="chip-grid">
                 {Object.entries(GOAL_LABELS).map(([id, label]) => (
                   <button
@@ -958,7 +976,21 @@ export function ChatSimulator() {
                       {result.country.pros.map((p, i) => <div key={i} className="text-xs text-green-700">✅ {p}</div>)}
                       <div className="text-xs font-semibold text-gray-600 mt-2 mb-1">ข้อควรรู้:</div>
                       {result.country.cons.map((c, i) => <div key={i} className="text-xs text-orange-600">⚠️ {c}</div>)}
-                      <div className="text-xs text-gray-400 mt-2">💰 เงินเดือนเฉลี่ย ~${result.country.avgSalaryUSD.toLocaleString()}/ปี | ค่าครองชีพ {result.country.costIndex}% ของไทย | คนไทย: {result.country.thaiCommunity === 'large' ? 'เยอะ' : result.country.thaiCommunity === 'medium' ? 'พอมี' : 'น้อย'}</div>
+                      {(() => {
+                        const userOcc = aiMode ? aiGathered.occupation : occupation
+                        const salary = getOccSalary(result.country.id, userOcc)
+                        const occLabel = OCCUPATIONS.find(o => o.id === userOcc)?.labelTH || userOcc
+                        if (salary) {
+                          return (
+                            <div className="text-xs mt-2 space-y-1">
+                              <div className="text-blue-600 font-medium">💼 เงินเดือน {occLabel} ({salary.currency}/ปี):</div>
+                              <div className="text-gray-600">🟢 Entry: {salary.entry.toLocaleString()} → Mid: {salary.mid.toLocaleString()} → Senior: {salary.senior.toLocaleString()}</div>
+                              <div className="text-gray-400">ค่าครองชีพ {result.country.costIndex}% ของไทย | คนไทย: {result.country.thaiCommunity === 'large' ? 'เยอะ' : result.country.thaiCommunity === 'medium' ? 'พอมี' : 'น้อย'}</div>
+                            </div>
+                          )
+                        }
+                        return <div className="text-xs text-gray-400 mt-2">💰 เงินเดือนเฉลี่ย ~${result.country.avgSalaryUSD.toLocaleString()}/ปี | ค่าครองชีพ {result.country.costIndex}% ของไทย | คนไทย: {result.country.thaiCommunity === 'large' ? 'เยอะ' : result.country.thaiCommunity === 'medium' ? 'พอมี' : 'น้อย'}</div>
+                      })()}
                     </div>
                   )}
 
